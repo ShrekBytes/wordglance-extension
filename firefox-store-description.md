@@ -1,11 +1,3 @@
-# Firefox Store Description
-
-## Summary (135 characters max)
-
-Get instant dictionary definitions and translations for any text on any website! Just select text and click the book icon.
-
-## Description
-
 **WordGlance** - Your instant dictionary and translation companion!
 
 or get the [userscript version](https://github.com/ShrekBytes/WordGlance)

@@ -5,8 +5,16 @@ const LANGUAGES = {
 function getLanguageName(code) { return LANGUAGES[code] || code.toUpperCase(); }
 
 function renderLanguageOptions(el, includeAuto) {
+  el.innerHTML = ''; // clear existing options
   const entries = Object.entries(LANGUAGES).filter(([c]) => includeAuto || c !== 'auto');
-  el.innerHTML = entries.map(([code, name]) => `<div class="language-option" data-code="${code}">${name}</div>`).join('');
+
+  entries.forEach(([code, name]) => {
+    const div = document.createElement('div');
+    div.className = 'language-option';
+    div.dataset.code = code;
+    div.textContent = name; // safe! no HTML parsing
+    el.appendChild(div);
+  });
 }
 
 function setupSelector(root, prefix, isSource, currentCode, onChange) {

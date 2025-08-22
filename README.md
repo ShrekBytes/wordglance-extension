@@ -2,7 +2,7 @@
 
 Get instant dictionary definitions and translations for any text on any website! Just select text and click the book icon.
 
-> **For Chrome and other browsers**: Use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) instead
+> **🚨 For Chrome, Edge, Safari, and other browsers**: Use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) instead
 
 [![Install Firefox Extension](https://img.shields.io/badge/Install%20Firefox%20Extension-WordGlance-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)
 [![View on GitHub](https://img.shields.io/badge/View%20on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/ShrekBytes/wordglance-extension)

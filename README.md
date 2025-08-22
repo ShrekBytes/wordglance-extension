@@ -8,8 +8,8 @@ Get instant dictionary definitions and translations for any text on any website!
 > **Why no extension for Chromium-based browsers?**  
 > Well… fu\*k Google.
 
-[![Install Firefox Extension](https://img.shields.io/badge/Install%20Firefox%20Extension-WordGlance-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)
-[![Userscript Version](https://img.shields.io/badge/Userscript%20Version-WordGlance-blue?style=for-the-badge&logo=userscript)](https://github.com/ShrekBytes/WordGlance)
+![Extension Badge](assets/icon.png) [![GreasyFork](https://img.shields.io/badge/GreasyFork-Userscript-4E9A06?style=for-the-badge&logo=greasyfork)](https://greasyfork.org/en/scripts/546617-wordglance-dictionary-translation-tooltip)
+[![Firefox](https://img.shields.io/badge/Firefox-Add--on-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)
 
 ![WordGlance Screenshot](/screenshots/dark.png)
 

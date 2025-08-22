@@ -385,132 +385,344 @@
     };
   }
 
-  // --------------------------- UI elements in shadow ---------------------------
-  const triggerIcon = document.createElement('button');
-  triggerIcon.className = 'wordglance-trigger-icon';
-  triggerIcon.textContent = '📖';
-  triggerIcon.style.display = 'none';
-  triggerIcon.style.position = 'absolute';
-  triggerIcon.style.pointerEvents = 'auto';
-  root.appendChild(triggerIcon);
+ // --------------------------- UI elements in shadow ---------------------------
 
-  const tooltip = document.createElement('div');
-  tooltip.className = 'wordglance-tooltip';
-  tooltip.style.display = 'none';
-  tooltip.style.position = 'absolute';
-  tooltip.innerHTML = `
-    <div class="definition-section">
-      <div class="section-title">
-        <span class="word-title">Word</span>
-        <div class="slider-controls">
-          <button class="slider-button definition-prev">‹</button>
-          <span class="slider-info definition-info">1/1</span>
-          <button class="slider-button definition-next">›</button>
-        </div>
-      </div>
-      <div class="content-container"><div class="content-slider definition-slider">
-        <div class="content-page"><div class="definition-content loading">Loading...</div></div>
-      </div></div>
-    </div>
-    <div class="translation-section">
-      <div class="section-title">
-        <span class="translation-title">Loading...</span>
-        <div class="slider-controls">
-          <button class="slider-button translation-prev">‹</button>
-          <span class="slider-info translation-info">1/1</span>
-          <button class="slider-button translation-next">›</button>
-        </div>
-      </div>
-      <div class="content-container"><div class="content-slider translation-slider">
-        <div class="content-page"><div class="translation-content loading">Loading...</div></div>
-      </div></div>
-    </div>
-    <div class="synonyms-antonyms-section" style="display:none;">
-      <div class="synonyms-antonyms-content"></div>
-    </div>
-  `;
-  root.appendChild(tooltip);
+// Trigger icon
+const triggerIcon = document.createElement('button');
+triggerIcon.className = 'wordglance-trigger-icon';
+triggerIcon.textContent = '📖';
+triggerIcon.style.display = 'none';
+triggerIcon.style.position = 'absolute';
+triggerIcon.style.pointerEvents = 'auto';
+root.appendChild(triggerIcon);
 
-  // Settings overlay
-  const settings = document.createElement('div');
-  settings.className = 'wordglance-settings';
-  settings.style.display = 'none';
-  settings.innerHTML = `
-    <button class="close-button">×</button>
-    <div class="settings-header">⚙️ Settings</div>
-    <div class="setting-section">
-      <div class="setting-item">
-        <div class="setting-label">Dark Mode</div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="dark-mode-toggle">
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="setting-item">
-        <div class="setting-label">
-          <div>From Language</div>
-          <div class="cache-info">Use auto for best experience</div>
-        </div>
-        <div class="language-selector" id="source-language-selector">
-          <span class="language-text">Auto-detect</span>
-          <div class="language-dropdown" id="source-language-dropdown">
-            <input type="text" class="language-search" id="source-language-search" placeholder="Search languages...">
-            <div class="language-options" id="source-language-options"></div>
-          </div>
-        </div>
-      </div>
-      <div class="setting-item">
-        <div class="setting-label">To Language</div>
-        <div class="language-selector" id="target-language-selector">
-          <span class="language-text">${getLanguageName(targetLanguage)}</span>
-          <div class="language-dropdown" id="target-language-dropdown">
-            <input type="text" class="language-search" id="target-language-search" placeholder="Search languages...">
-            <div class="language-options" id="target-language-options"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="setting-section">
-      <div class="setting-item">
-        <div class="setting-label">
-          <div>Cache</div>
-          <div class="cache-info" id="cache-info">Loading...</div>
-        </div>
-        <button class="cache-button" id="clear-cache-btn">Clear</button>
-      </div>
-    </div>
-    <div class="setting-section">
-      <div class="usage-circle">
-        <div class="usage-number">0</div>
-        <div class="usage-label">words learned</div>
-      </div>
-    </div>
-    <div class="credit-section">
-      <a href="https://github.com/ShrekBytes/WordGlance/issues" target="_blank" class="help-link">Need help?</a>
-      <div class="credit-text">
-        Made by
-        <a href="https://github.com/ShrekBytes/WordGlance" target="_blank" class="credit-link">
-          <svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-          </svg>
-          ShrekBytes
-        </a>
-      </div>
-    </div>
-  `;
-  root.appendChild(settings);
+// Tooltip
+const tooltip = document.createElement('div');
+tooltip.className = 'wordglance-tooltip';
+tooltip.style.display = 'none';
+tooltip.style.position = 'absolute';
+root.appendChild(tooltip);
 
-  function applyDarkMode() {
-    if (isDarkMode) {
-      triggerIcon.classList.add('dark-mode');
-      tooltip.classList.add('dark-mode');
-      settings.classList.add('dark-mode');
-    } else {
-      triggerIcon.classList.remove('dark-mode');
-      tooltip.classList.remove('dark-mode');
-      settings.classList.remove('dark-mode');
-    }
+// -------- Definition Section --------
+const defSection = document.createElement('div');
+defSection.className = 'definition-section';
+
+const defTitle = document.createElement('div');
+defTitle.className = 'section-title';
+const wordTitle = document.createElement('span');
+wordTitle.className = 'word-title';
+wordTitle.textContent = 'Word';
+defTitle.appendChild(wordTitle);
+
+// Slider controls
+const defSliderControls = document.createElement('div');
+defSliderControls.className = 'slider-controls';
+
+const defPrev = document.createElement('button');
+defPrev.className = 'slider-button definition-prev';
+defPrev.textContent = '‹';
+defSliderControls.appendChild(defPrev);
+
+const defInfo = document.createElement('span');
+defInfo.className = 'slider-info definition-info';
+defInfo.textContent = '1/1';
+defSliderControls.appendChild(defInfo);
+
+const defNext = document.createElement('button');
+defNext.className = 'slider-button definition-next';
+defNext.textContent = '›';
+defSliderControls.appendChild(defNext);
+
+defTitle.appendChild(defSliderControls);
+defSection.appendChild(defTitle);
+
+// Content container
+const defContentContainer = document.createElement('div');
+defContentContainer.className = 'content-container';
+const defSliderDiv = document.createElement('div');
+defSliderDiv.className = 'content-slider definition-slider';
+const defPage = document.createElement('div');
+defPage.className = 'content-page';
+const defContent = document.createElement('div');
+defContent.className = 'definition-content loading';
+defContent.textContent = 'Loading...';
+defPage.appendChild(defContent);
+defSliderDiv.appendChild(defPage);
+defContentContainer.appendChild(defSliderDiv);
+defSection.appendChild(defContentContainer);
+
+tooltip.appendChild(defSection);
+
+// -------- Translation Section --------
+const transSection = document.createElement('div');
+transSection.className = 'translation-section';
+
+const transTitle = document.createElement('div');
+transTitle.className = 'section-title';
+const transSpan = document.createElement('span');
+transSpan.className = 'translation-title';
+transSpan.textContent = 'Loading...';
+transTitle.appendChild(transSpan);
+
+const transSliderControls = document.createElement('div');
+transSliderControls.className = 'slider-controls';
+
+const transPrev = document.createElement('button');
+transPrev.className = 'slider-button translation-prev';
+transPrev.textContent = '‹';
+transSliderControls.appendChild(transPrev);
+
+const transInfo = document.createElement('span');
+transInfo.className = 'slider-info translation-info';
+transInfo.textContent = '1/1';
+transSliderControls.appendChild(transInfo);
+
+const transNext = document.createElement('button');
+transNext.className = 'slider-button translation-next';
+transNext.textContent = '›';
+transSliderControls.appendChild(transNext);
+
+transTitle.appendChild(transSliderControls);
+transSection.appendChild(transTitle);
+
+// Content container
+const transContentContainer = document.createElement('div');
+transContentContainer.className = 'content-container';
+const transSliderDiv = document.createElement('div');
+transSliderDiv.className = 'content-slider translation-slider';
+const transPage = document.createElement('div');
+transPage.className = 'content-page';
+const transContent = document.createElement('div');
+transContent.className = 'translation-content loading';
+transContent.textContent = 'Loading...';
+transPage.appendChild(transContent);
+transSliderDiv.appendChild(transPage);
+transContentContainer.appendChild(transSliderDiv);
+transSection.appendChild(transContentContainer);
+
+tooltip.appendChild(transSection);
+
+// -------- Synonyms & Antonyms Section --------
+const synSection = document.createElement('div');
+synSection.className = 'synonyms-antonyms-section';
+synSection.style.display = 'none';
+const synContent = document.createElement('div');
+synContent.className = 'synonyms-antonyms-content';
+synSection.appendChild(synContent);
+tooltip.appendChild(synSection);
+
+// --------------------------- Settings Overlay ---------------------------
+const settings = document.createElement('div');
+settings.className = 'wordglance-settings';
+settings.style.display = 'none';
+root.appendChild(settings);
+
+// Close button
+const closeBtn = document.createElement('button');
+closeBtn.className = 'close-button';
+closeBtn.textContent = '×';
+settings.appendChild(closeBtn);
+
+// Header
+const settingsHeader = document.createElement('div');
+settingsHeader.className = 'settings-header';
+settingsHeader.textContent = '⚙️ Settings';
+settings.appendChild(settingsHeader);
+
+// -------- Dark Mode Section --------
+const darkSection = document.createElement('div');
+darkSection.className = 'setting-section';
+const darkItem = document.createElement('div');
+darkItem.className = 'setting-item';
+const darkLabel = document.createElement('div');
+darkLabel.className = 'setting-label';
+darkLabel.textContent = 'Dark Mode';
+darkItem.appendChild(darkLabel);
+
+const toggleLabel = document.createElement('label');
+toggleLabel.className = 'toggle-switch';
+const toggleInput = document.createElement('input');
+toggleInput.type = 'checkbox';
+toggleInput.id = 'dark-mode-toggle';
+const toggleSlider = document.createElement('span');
+toggleSlider.className = 'toggle-slider';
+toggleLabel.appendChild(toggleInput);
+toggleLabel.appendChild(toggleSlider);
+darkItem.appendChild(toggleLabel);
+
+darkSection.appendChild(darkItem);
+settings.appendChild(darkSection);
+
+// -------- Source Language Section --------
+const sourceSection = document.createElement('div');
+sourceSection.className = 'setting-section';
+const sourceItem = document.createElement('div');
+sourceItem.className = 'setting-item';
+
+const sourceLabelWrapper = document.createElement('div');
+sourceLabelWrapper.className = 'setting-label';
+const sourceLabel = document.createElement('div');
+sourceLabel.textContent = 'From Language';
+const sourceCacheInfo = document.createElement('div');
+sourceCacheInfo.className = 'cache-info';
+sourceCacheInfo.textContent = 'Use auto for best experience';
+sourceLabelWrapper.appendChild(sourceLabel);
+sourceLabelWrapper.appendChild(sourceCacheInfo);
+sourceItem.appendChild(sourceLabelWrapper);
+
+// Language selector
+const sourceSelector = document.createElement('div');
+sourceSelector.className = 'language-selector';
+sourceSelector.id = 'source-language-selector';
+const sourceText = document.createElement('span');
+sourceText.className = 'language-text';
+sourceText.textContent = 'Auto-detect';
+const sourceDropdown = document.createElement('div');
+sourceDropdown.className = 'language-dropdown';
+sourceDropdown.id = 'source-language-dropdown';
+const sourceInput = document.createElement('input');
+sourceInput.type = 'text';
+sourceInput.className = 'language-search';
+sourceInput.id = 'source-language-search';
+sourceInput.placeholder = 'Search languages...';
+const sourceOptions = document.createElement('div');
+sourceOptions.className = 'language-options';
+sourceOptions.id = 'source-language-options';
+
+sourceDropdown.appendChild(sourceInput);
+sourceDropdown.appendChild(sourceOptions);
+sourceSelector.appendChild(sourceText);
+sourceSelector.appendChild(sourceDropdown);
+sourceItem.appendChild(sourceSelector);
+sourceSection.appendChild(sourceItem);
+settings.appendChild(sourceSection);
+
+// -------- Target Language Section --------
+const targetSection = document.createElement('div');
+targetSection.className = 'setting-section';
+const targetItem = document.createElement('div');
+targetItem.className = 'setting-item';
+
+const targetLabelWrapper = document.createElement('div');
+targetLabelWrapper.className = 'setting-label';
+const targetLabel = document.createElement('div');
+targetLabel.textContent = 'To Language';
+targetLabelWrapper.appendChild(targetLabel);
+targetItem.appendChild(targetLabelWrapper);
+
+const targetSelector = document.createElement('div');
+targetSelector.className = 'language-selector';
+targetSelector.id = 'target-language-selector';
+const targetText = document.createElement('span');
+targetText.className = 'language-text';
+targetText.textContent = getLanguageName(targetLanguage);
+const targetDropdown = document.createElement('div');
+targetDropdown.className = 'language-dropdown';
+targetDropdown.id = 'target-language-dropdown';
+const targetInput = document.createElement('input');
+targetInput.type = 'text';
+targetInput.className = 'language-search';
+targetInput.id = 'target-language-search';
+targetInput.placeholder = 'Search languages...';
+const targetOptions = document.createElement('div');
+targetOptions.className = 'language-options';
+targetOptions.id = 'target-language-options';
+
+targetDropdown.appendChild(targetInput);
+targetDropdown.appendChild(targetOptions);
+targetSelector.appendChild(targetText);
+targetSelector.appendChild(targetDropdown);
+targetItem.appendChild(targetSelector);
+targetSection.appendChild(targetItem);
+settings.appendChild(targetSection);
+
+// -------- Cache Section --------
+const cacheSection = document.createElement('div');
+cacheSection.className = 'setting-section';
+const cacheItem = document.createElement('div');
+cacheItem.className = 'setting-item';
+
+const cacheLabelWrapper = document.createElement('div');
+cacheLabelWrapper.className = 'setting-label';
+const cacheLabel = document.createElement('div');
+cacheLabel.textContent = 'Cache';
+const cacheInfo = document.createElement('div');
+cacheInfo.className = 'cache-info';
+cacheInfo.id = 'cache-info';
+cacheInfo.textContent = 'Loading...';
+cacheLabelWrapper.appendChild(cacheLabel);
+cacheLabelWrapper.appendChild(cacheInfo);
+cacheItem.appendChild(cacheLabelWrapper);
+
+const cacheBtn = document.createElement('button');
+cacheBtn.className = 'cache-button';
+cacheBtn.id = 'clear-cache-btn';
+cacheBtn.textContent = 'Clear';
+cacheItem.appendChild(cacheBtn);
+
+cacheSection.appendChild(cacheItem);
+settings.appendChild(cacheSection);
+
+// -------- Usage Section --------
+const usageSection = document.createElement('div');
+usageSection.className = 'setting-section';
+const usageCircle = document.createElement('div');
+usageCircle.className = 'usage-circle';
+const usageNumber = document.createElement('div');
+usageNumber.className = 'usage-number';
+usageNumber.textContent = '0';
+const usageLabel = document.createElement('div');
+usageLabel.className = 'usage-label';
+usageLabel.textContent = 'words learned';
+usageCircle.appendChild(usageNumber);
+usageCircle.appendChild(usageLabel);
+usageSection.appendChild(usageCircle);
+settings.appendChild(usageSection);
+
+// -------- Credit Section --------
+const creditSection = document.createElement('div');
+creditSection.className = 'credit-section';
+const helpLink = document.createElement('a');
+helpLink.href = 'https://github.com/ShrekBytes/WordGlance/issues';
+helpLink.target = '_blank';
+helpLink.className = 'help-link';
+helpLink.textContent = 'Need help?';
+creditSection.appendChild(helpLink);
+
+const creditText = document.createElement('div');
+creditText.className = 'credit-text';
+creditText.textContent = 'Made by ';
+
+const creditLink = document.createElement('a');
+creditLink.href = 'https://github.com/ShrekBytes/WordGlance';
+creditLink.target = '_blank';
+creditLink.className = 'credit-link';
+
+// GitHub icon SVG
+creditLink.innerHTML = `
+<svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
+<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+</svg>
+ShrekBytes
+`;
+
+creditText.appendChild(creditLink);
+creditSection.appendChild(creditText);
+settings.appendChild(creditSection);
+
+// Apply dark mode function
+function applyDarkMode() {
+  if (isDarkMode) {
+    triggerIcon.classList.add('dark-mode');
+    tooltip.classList.add('dark-mode');
+    settings.classList.add('dark-mode');
+  } else {
+    triggerIcon.classList.remove('dark-mode');
+    tooltip.classList.remove('dark-mode');
+    settings.classList.remove('dark-mode');
   }
+}
+
 
   // --------------------------- Load persisted settings ---------------------------
   (async function initSettings() {
@@ -869,10 +1081,41 @@
     const next = tooltip.querySelector('.definition-next');
     definitionPages = paginate(defs.slice(0, CONFIG.maxDefinitions), CONFIG.definitionsPerPage);
     currentDefinitionPage = 0;
-  slider.innerHTML = definitionPages.map(page => `
-      <div class="content-page">
-    ${page.map(d => `<div class="definition-item">${d.partOfSpeech?`<span class=\"part-of-speech\">${escapeHtml(d.partOfSpeech)}</span>`:''}<div class="definition-text">${escapeHtml(d.definition)}</div>${d.example?`<div class=\"example\">${escapeHtml(d.example)}</div>`:''}</div>`).join('') || `<div class="definition-content error">${createErrorMessage('NO_DEFINITION')}</div>`}
-      </div>`).join('');
+    slider.textContent = ''; // clear old pages
+    definitionPages.forEach(page => {
+      const pageDiv = document.createElement('div');
+      pageDiv.className = 'content-page';
+      if (!page.length) {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'definition-content error';
+        errDiv.textContent = createErrorMessage('NO_DEFINITION');
+        pageDiv.appendChild(errDiv);
+      } else {
+        page.forEach(d => {
+          const defDiv = document.createElement('div');
+          defDiv.className = 'definition-item';
+          if (d.partOfSpeech) {
+            const pos = document.createElement('span');
+            pos.className = 'part-of-speech';
+            pos.textContent = d.partOfSpeech;
+            defDiv.appendChild(pos);
+          }
+          const text = document.createElement('div');
+          text.className = 'definition-text';
+          text.textContent = d.definition;
+          defDiv.appendChild(text);
+          if (d.example) {
+            const ex = document.createElement('div');
+            ex.className = 'example';
+            ex.textContent = d.example;
+            defDiv.appendChild(ex);
+          }
+          pageDiv.appendChild(defDiv);
+        });
+      }
+      slider.appendChild(pageDiv);
+    });
+    
   // Measure page heights
   definitionPageHeights = Array.from(slider.children).map(page => measurePageHeight(page));
   // Sync height and controls
@@ -888,7 +1131,34 @@
     if ((synonyms && synonyms.length) || (antonyms && antonyms.length)) {
       const synHtml = synonyms && synonyms.length ? `<div class="synonyms"><span class="synonyms-label">Synonyms:</span> <span class="synonyms-list">${synonyms.slice(0, CONFIG.maxSynonyms).map(escapeHtml).join(', ')}</span></div>` : '';
       const antHtml = antonyms && antonyms.length ? `<div class="antonyms"><span class="antonyms-label">Antonyms:</span> <span class="antonyms-list">${antonyms.slice(0, CONFIG.maxAntonyms).map(escapeHtml).join(', ')}</span></div>` : '';
-      cont.innerHTML = synHtml + antHtml;
+      cont.textContent = ''; // clear
+      if (synonyms && synonyms.length) {
+        const synDiv = document.createElement('div');
+        synDiv.className = 'synonyms';
+        const label = document.createElement('span');
+        label.className = 'synonyms-label';
+        label.textContent = 'Synonyms:';
+        synDiv.appendChild(label);
+        const list = document.createElement('span');
+        list.className = 'synonyms-list';
+        list.textContent = synonyms.slice(0, CONFIG.maxSynonyms).join(', ');
+        synDiv.appendChild(list);
+        cont.appendChild(synDiv);
+      }
+      if (antonyms && antonyms.length) {
+        const antDiv = document.createElement('div');
+        antDiv.className = 'antonyms';
+        const label = document.createElement('span');
+        label.className = 'antonyms-label';
+        label.textContent = 'Antonyms:';
+        antDiv.appendChild(label);
+        const list = document.createElement('span');
+        list.className = 'antonyms-list';
+        list.textContent = antonyms.slice(0, CONFIG.maxAntonyms).join(', ');
+        antDiv.appendChild(list);
+        cont.appendChild(antDiv);
+      }
+      
       section.style.display = '';
     } else {
       section.style.display = 'none';
@@ -903,12 +1173,22 @@
     const next = tooltip.querySelector('.translation-next');
     translationPages = paginate(items.slice(0, CONFIG.maxTranslations), CONFIG.translationsPerPage);
     currentTranslationPage = 0;
-    slider.innerHTML = translationPages.map(page => `
-      <div class="content-page">
-        <div class="translation-grid">
-          ${[0,1,2,3].map(i => `<div class="translation-text">${page[i] ? escapeHtml(page[i]) : ''}</div>`).join('')}
-        </div>
-      </div>`).join('');
+    slider.textContent = ''; // clear old pages
+    translationPages.forEach(page => {
+      const pageDiv = document.createElement('div');
+      pageDiv.className = 'content-page';
+      const grid = document.createElement('div');
+      grid.className = 'translation-grid';
+      for (let i = 0; i < 4; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'translation-text';
+        if (page[i]) cell.textContent = page[i];
+        grid.appendChild(cell);
+      }
+      pageDiv.appendChild(grid);
+      slider.appendChild(pageDiv);
+    });
+    
     // Measure page heights
     translationPageHeights = Array.from(slider.children).map(page => measurePageHeight(page));
     // Sync height and controls

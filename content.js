@@ -302,6 +302,18 @@
     .wordglance-tooltip.dark-mode .loading { color: #cccccc; }
     .wordglance-tooltip .error { color: #e74c3c; font-size: 13px; }
     .wordglance-tooltip.dark-mode .error { color: #ff6b6b; }
+    .wordglance-tooltip .info { 
+      color:rgb(0, 60, 170); 
+      font-size: 14px; 
+      font-weight: 600;
+      text-align: center; 
+      padding: 20px 16px; 
+      line-height: 1.4;
+      font-style: italic;
+    }
+    .wordglance-tooltip.dark-mode .info { 
+      color:rgb(172, 219, 52); 
+    }
     
     .wordglance-tooltip .synonyms-antonyms-section { margin-top: 12px; }
     .wordglance-tooltip .synonyms, .wordglance-tooltip .antonyms { margin-top: 4px; }
@@ -1385,9 +1397,25 @@ function applyDarkMode() {
     if (transCont) smoothHeightTransition(transCont, 80, true);
   
     try {
-      const def = await fetchDefinition(currentSelection);
-      renderDefinitionPages(def.defs);
-      renderSynAnt(def.synonyms, def.antonyms);
+      // Check if source language is English for definitions
+      if (sourceLanguage !== 'en' && sourceLanguage !== 'auto') {
+        // Show message that definitions are only available for English
+        if (defSlider) {
+          defSlider.textContent = ''; // clear
+          const defPage = document.createElement('div');
+          defPage.className = 'content-page';
+          const defContent = document.createElement('div');
+          defContent.className = 'definition-content info';
+          defContent.textContent = 'Definitions are only available for English words. Please select English as the source language.';
+          defPage.appendChild(defContent);
+          defSlider.appendChild(defPage);
+        }
+        renderSynAnt([], []);
+      } else {
+        const def = await fetchDefinition(currentSelection);
+        renderDefinitionPages(def.defs);
+        renderSynAnt(def.synonyms, def.antonyms);
+      }
     } catch (err) {
       if (defSlider) {
         defSlider.textContent = ''; // clear

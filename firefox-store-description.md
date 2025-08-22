@@ -51,5 +51,4 @@ WordGlance is completely free and open source under GPL-3.0 license. Feel free t
 
 ---
 
-**⭐ Love WordGlance? Give this  a star on GitHub!**
-
+**⭐ Love WordGlance? Give this a star on GitHub!**

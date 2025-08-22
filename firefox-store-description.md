@@ -8,14 +8,13 @@ Get instant dictionary definitions and translations for any text on any website!
 
 **WordGlance** - Your instant dictionary and translation companion!
 
+or get the [userscript version](https://github.com/ShrekBytes/WordGlance)
+
 **✨ What it does:**
 
 • **📚 Dictionary**: Get definitions, examples, synonyms and antonyms instantly
-
 • **🌍 Translation**: Translate to 40+ languages with one click
-
 • **📱 Mobile-friendly**: Works perfectly on both desktop and mobile
-
 • **🔧 Customizable**: Choose your preferred languages and settings
 
 **🚀 How to use:**

@@ -6,7 +6,7 @@ Get instant dictionary definitions and translations for any text on any website!
 > Use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) — it works the same as the extension.  
 >
 > **Why no extension for Chromium-based browsers?**  
-> Well… fu*k Google. 😉
+> Well… fu*k Google.
 
 
 [![Install Firefox Extension](https://img.shields.io/badge/Install%20Firefox%20Extension-WordGlance-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)

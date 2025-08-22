@@ -116,7 +116,7 @@ async function init() {
   const store = await browser.storage.local.get(['wordglance-dark-mode','wordglance-source-language','wordglance-target-language','wordglance-total-words-learned']);
   const isDark = !!store['wordglance-dark-mode'];
   const sLang = store['wordglance-source-language'] || 'auto';
-  const tLang = store['wordglance-target-language'] || 'bn';
+  const tLang = store['wordglance-target-language'] || 'en';
   const learned = store['wordglance-total-words-learned'] || 0;
 
   usageNumber.textContent = String(learned);

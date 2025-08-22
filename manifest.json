@@ -1,0 +1,48 @@
+{
+  "manifest_version": 2,
+  "name": "WordGlance - Dictionary & Translation Tooltip",
+  "version": "2.1.0",
+  "description": "Show instant dictionary definitions and translations for selected text with any language support.",
+  "icons": {
+    "48": "assets/icon.svg",
+    "96": "assets/icon.svg"
+  },
+  "permissions": [
+    "storage",
+    "menus",
+    "activeTab",
+    "https://api.dictionaryapi.dev/*",
+    "https://ftapi.pythonanywhere.com/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "browser_action": {
+    "default_icon": "assets/icon.svg",
+    "default_title": "WordGlance",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "wordglance@example.com",
+      "strict_min_version": "91.0"
+    }
+  },
+  "commands": {
+    "wordglance-open-settings": {
+      "suggested_key": {
+        "default": "Alt+W"
+      },
+      "description": "Open WordGlance settings"
+    }
+  },
+  "content_security_policy": "script-src 'self'; object-src 'self'"
+}

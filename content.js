@@ -514,7 +514,7 @@
 
   // --------------------------- Load persisted settings ---------------------------
   (async function initSettings() {
-    targetLanguage = await storage.get('wordglance-target-language', 'bn');
+    targetLanguage = await storage.get('wordglance-target-language', 'en');
     sourceLanguage = await storage.get('wordglance-source-language', 'auto');
     isDarkMode = await storage.get('wordglance-dark-mode', false);
     totalWordsLearned = await storage.get('wordglance-total-words-learned', 0);

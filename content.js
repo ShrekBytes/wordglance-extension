@@ -873,7 +873,36 @@ function applyDarkMode() {
 
   function hideTooltip() {
     tooltip.classList.remove('show');
-    setTimeout(()=>{ tooltip.style.display = 'none'; }, 200);
+    setTimeout(()=>{ 
+      tooltip.style.display = 'none'; 
+      // Clear all content when tooltip is hidden
+      clearTooltipContent();
+    }, 200);
+  }
+
+  function clearTooltipContent() {
+    // Clear definition slider
+    const defSlider = tooltip.querySelector('.definition-slider');
+    if (defSlider) {
+      defSlider.textContent = '';
+    }
+    
+    // Clear translation slider
+    const trSlider = tooltip.querySelector('.translation-slider');
+    if (trSlider) {
+      trSlider.textContent = '';
+    }
+    
+    // Clear synonyms and antonyms
+    renderSynAnt([], []);
+    
+    // Reset page counters
+    currentDefinitionPage = 0;
+    currentTranslationPage = 0;
+    
+    // Clear page height arrays
+    definitionPageHeights = [];
+    translationPageHeights = [];
   }
 
   function onSelectionEvent() {
@@ -1128,43 +1157,49 @@ function applyDarkMode() {
     const section = tooltip.querySelector('.synonyms-antonyms-section');
     const cont = tooltip.querySelector('.synonyms-antonyms-content');
     if (!section || !cont) return;
-    if ((synonyms && synonyms.length) || (antonyms && antonyms.length)) {
-      const synHtml = synonyms && synonyms.length ? `<div class="synonyms"><span class="synonyms-label">Synonyms:</span> <span class="synonyms-list">${synonyms.slice(0, CONFIG.maxSynonyms).map(escapeHtml).join(', ')}</span></div>` : '';
-      const antHtml = antonyms && antonyms.length ? `<div class="antonyms"><span class="antonyms-label">Antonyms:</span> <span class="antonyms-list">${antonyms.slice(0, CONFIG.maxAntonyms).map(escapeHtml).join(', ')}</span></div>` : '';
-      cont.textContent = ''; // clear
-      if (synonyms && synonyms.length) {
-        const synDiv = document.createElement('div');
-        synDiv.className = 'synonyms';
-        const label = document.createElement('span');
-        label.className = 'synonyms-label';
-        label.textContent = 'Synonyms:';
-        synDiv.appendChild(label);
-        const list = document.createElement('span');
-        list.className = 'synonyms-list';
-        list.textContent = synonyms.slice(0, CONFIG.maxSynonyms).join(', ');
-        synDiv.appendChild(list);
-        cont.appendChild(synDiv);
-      }
-      if (antonyms && antonyms.length) {
-        const antDiv = document.createElement('div');
-        antDiv.className = 'antonyms';
-        const label = document.createElement('span');
-        label.className = 'antonyms-label';
-        label.textContent = 'Antonyms:';
-        antDiv.appendChild(label);
-        const list = document.createElement('span');
-        list.className = 'antonyms-list';
-        list.textContent = antonyms.slice(0, CONFIG.maxAntonyms).join(', ');
-        antDiv.appendChild(list);
-        cont.appendChild(antDiv);
-      }
-      
-      section.style.display = '';
-    } else {
-      section.style.display = 'none';
-      cont.innerHTML = '';
+  
+    cont.textContent = ''; // clear previous content
+  
+    let hasContent = false;
+  
+    if (synonyms && synonyms.length) {
+      const synDiv = document.createElement('div');
+      synDiv.className = 'synonyms';
+  
+      const label = document.createElement('span');
+      label.className = 'synonyms-label';
+      label.textContent = 'Synonyms: ';
+      synDiv.appendChild(label);
+  
+      const list = document.createElement('span');
+      list.className = 'synonyms-list';
+      list.textContent = synonyms.slice(0, CONFIG.maxSynonyms).join(', ');
+      synDiv.appendChild(list);
+  
+      cont.appendChild(synDiv);
+      hasContent = true;
     }
-  }
+  
+    if (antonyms && antonyms.length) {
+      const antDiv = document.createElement('div');
+      antDiv.className = 'antonyms';
+  
+      const label = document.createElement('span');
+      label.className = 'antonyms-label';
+      label.textContent = 'Antonyms: ';
+      antDiv.appendChild(label);
+  
+      const list = document.createElement('span');
+      list.className = 'antonyms-list';
+      list.textContent = antonyms.slice(0, CONFIG.maxAntonyms).join(', ');
+      antDiv.appendChild(list);
+  
+      cont.appendChild(antDiv);
+      hasContent = true;
+    }
+  
+    section.style.display = hasContent ? '' : 'none';
+  }  
 
   function renderTranslationPages(items) {
     const slider = tooltip.querySelector('.translation-slider');
@@ -1304,43 +1339,90 @@ function applyDarkMode() {
   triggerIcon.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (!currentSelection) return;
-    
+  
     // Cancel any active requests from previous selections
     cancelActiveRequests();
-    
+  
     tooltip.querySelector('.word-title').textContent = currentSelection.slice(0, 50);
     updateTranslationTitle();
-
-  // loading states
-    tooltip.querySelector('.definition-slider').innerHTML = `<div class="content-page"><div class="definition-content loading">Loading...</div></div>`;
-    tooltip.querySelector('.translation-slider').innerHTML = `<div class="content-page"><div class="translation-content loading">Loading...</div></div>`;
+  
+    // initial loading states
+    const defSlider = tooltip.querySelector('.definition-slider');
+    const trSlider = tooltip.querySelector('.translation-slider');
+  
+    if (defSlider) {
+      defSlider.textContent = ''; // clear
+      const defPage = document.createElement('div');
+      defPage.className = 'content-page';
+      const defContent = document.createElement('div');
+      defContent.className = 'definition-content loading';
+      defContent.textContent = 'Loading...';
+      defPage.appendChild(defContent);
+      defSlider.appendChild(defPage);
+    }
+  
+    if (trSlider) {
+      trSlider.textContent = ''; // clear
+      const trPage = document.createElement('div');
+      trPage.className = 'content-page';
+      const trContent = document.createElement('div');
+      trContent.className = 'translation-content loading';
+      trContent.textContent = 'Loading...';
+      trPage.appendChild(trContent);
+      trSlider.appendChild(trPage);
+    }
+    
+    // Clear synonyms and antonyms immediately to prevent showing stale data
+    renderSynAnt([], []);
+  
     positionTooltipNearRect(selectionRect);
     showTooltipUI();
-  // set initial loading heights to prevent jump
-  const defCont = tooltip.querySelector('.definition-section .content-container');
-  const transCont = tooltip.querySelector('.translation-section .content-container');
-  if (defCont) smoothHeightTransition(defCont, 60, true);
-  if (transCont) smoothHeightTransition(transCont, 80, true);
-
+  
+    // set initial loading heights to prevent jump
+    const defCont = tooltip.querySelector('.definition-section .content-container');
+    const transCont = tooltip.querySelector('.translation-section .content-container');
+    if (defCont) smoothHeightTransition(defCont, 60, true);
+    if (transCont) smoothHeightTransition(transCont, 80, true);
+  
     try {
-  const def = await fetchDefinition(currentSelection);
-  renderDefinitionPages(def.defs);
-  renderSynAnt(def.synonyms, def.antonyms);
+      const def = await fetchDefinition(currentSelection);
+      renderDefinitionPages(def.defs);
+      renderSynAnt(def.synonyms, def.antonyms);
     } catch (err) {
-      tooltip.querySelector('.definition-slider').innerHTML = `<div class="content-page"><div class="definition-content error">${escapeHtml(String(err.message || err))}</div></div>`;
-  renderSynAnt([], []);
+      if (defSlider) {
+        defSlider.textContent = ''; // clear
+        const defPage = document.createElement('div');
+        defPage.className = 'content-page';
+        const defContent = document.createElement('div');
+        defContent.className = 'definition-content error';
+        defContent.textContent = String(err.message || err);
+        defPage.appendChild(defContent);
+        defSlider.appendChild(defPage);
+      }
+      renderSynAnt([], []);
     }
+  
     try {
       const tr = await fetchTranslation(currentSelection);
       renderTranslationPages(tr.translations);
       // learned count heuristic: increment once per show
-      totalWordsLearned += 1; storage.set('wordglance-total-words-learned', totalWordsLearned);
+      totalWordsLearned += 1;
+      storage.set('wordglance-total-words-learned', totalWordsLearned);
       settings.querySelector('.usage-number').textContent = String(totalWordsLearned);
     } catch (err) {
-      tooltip.querySelector('.translation-slider').innerHTML = `<div class="content-page"><div class="translation-content error">${escapeHtml(String(err.message || err))}</div></div>`;
+      if (trSlider) {
+        trSlider.textContent = ''; // clear
+        const trPage = document.createElement('div');
+        trPage.className = 'content-page';
+        const trContent = document.createElement('div');
+        trContent.className = 'translation-content error';
+        trContent.textContent = String(err.message || err);
+        trPage.appendChild(trContent);
+        trSlider.appendChild(trPage);
+      }
     }
   });
-
+  
   // prevent clicks from closing selection
   tooltip.addEventListener('mousedown', e => e.stopPropagation());
   tooltip.addEventListener('click', e => e.stopPropagation());

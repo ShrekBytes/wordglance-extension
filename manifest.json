@@ -4,8 +4,10 @@
   "version": "2.1.0",
   "description": "Show instant dictionary definitions and translations for selected text with any language support.",
   "icons": {
-    "48": "assets/icon.svg",
-    "96": "assets/icon.svg"
+    "16": "assets/icon_16.png",
+    "32": "assets/icon_32.png",
+    "48": "assets/icon_48.png",
+    "128": "assets/icon_128.png"
   },
   "permissions": [
     "storage",
@@ -19,9 +21,13 @@
     "persistent": false
   },
   "browser_action": {
-    "default_icon": "assets/icon.svg",
     "default_title": "WordGlance",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "assets/icon_16.png",
+      "32": "assets/icon_32.png",
+      "48": "assets/icon_48.png"
+    }
   },
   "content_scripts": [
     {
@@ -30,12 +36,6 @@
       "run_at": "document_end"
     }
   ],
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "wordglance@example.com",
-      "strict_min_version": "91.0"
-    }
-  },
   "commands": {
     "wordglance-open-settings": {
       "suggested_key": {

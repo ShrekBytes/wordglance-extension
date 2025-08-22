@@ -3,14 +3,13 @@
 Get instant dictionary definitions and translations for any text on any website! Just select text and click the book icon.
 
 > **🚨 For Chrome, Edge, Safari, and other browsers**:  
-> Use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) — it works the same as the extension.  
+> Use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) — it works the same as the extension.
 >
 > **Why no extension for Chromium-based browsers?**  
-> Well… fu*k Google.
-
+> Well… fu\*k Google.
 
 [![Install Firefox Extension](https://img.shields.io/badge/Install%20Firefox%20Extension-WordGlance-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)
-[![View on GitHub](https://img.shields.io/badge/View%20on-GitHub-181717?style=for-the-badge&logo=github)](https://github.com/ShrekBytes/wordglance-extension)
+[![Userscript Version](https://img.shields.io/badge/Userscript%20Version-WordGlance-blue?style=for-the-badge&logo=userscript)](https://github.com/ShrekBytes/WordGlance)
 
 ![WordGlance Screenshot](/screenshots/dark.png)
 

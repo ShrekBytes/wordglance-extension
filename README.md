@@ -8,7 +8,7 @@ Get instant dictionary definitions and translations for any text on any website!
 > **Why no extension for Chromium-based browsers?**  
 > Well… fu\*k Google.
 
-![Extension Badge](assets/icon.png) [![GreasyFork](https://img.shields.io/badge/GreasyFork-Userscript-4E9A06?style=for-the-badge&logo=greasyfork)](https://greasyfork.org/en/scripts/546617-wordglance-dictionary-translation-tooltip)
+![Extension Badge](assets/icon_128.png) [![GreasyFork](https://img.shields.io/badge/GreasyFork-Userscript-4E9A06?style=for-the-badge&logo=greasyfork)](https://greasyfork.org/en/scripts/546617-wordglance-dictionary-translation-tooltip)
 [![Firefox](https://img.shields.io/badge/Firefox-Add--on-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)
 
 ![WordGlance Screenshot](/screenshots/dark.png)

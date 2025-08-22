@@ -532,8 +532,28 @@
     settings.querySelector('.usage-number').textContent = String(totalWordsLearned);
     settings.querySelector('#source-language-selector .language-text').textContent = getLanguageName(sourceLanguage);
     settings.querySelector('#target-language-selector .language-text').textContent = getLanguageName(targetLanguage);
-    settings.querySelector('#source-language-options').innerHTML = Object.entries(LANGUAGES).map(([code, name]) => `<div class="language-option ${code===sourceLanguage?'selected':''}" data-code="${code}">${name}</div>`).join('');
-    settings.querySelector('#target-language-options').innerHTML = Object.entries(LANGUAGES).filter(([c])=>c!=='auto').map(([code, name]) => `<div class="language-option ${code===targetLanguage?'selected':''}" data-code="${code}">${name}</div>`).join('');
+    const sourceOptions = settings.querySelector('#source-language-options');
+    sourceOptions.textContent = ''; // clear
+    
+    Object.entries(LANGUAGES).forEach(([code, name]) => {
+      const opt = document.createElement('div');
+      opt.className = 'language-option';
+      if (code === sourceLanguage) opt.classList.add('selected');
+      opt.dataset.code = code;
+      opt.textContent = name;
+      sourceOptions.appendChild(opt);
+    });
+    const targetOptions = settings.querySelector('#target-language-options');
+    targetOptions.textContent = ''; // clear
+
+    Object.entries(LANGUAGES).filter(([c])=>c!=='auto').forEach(([code, name]) => {
+      const opt = document.createElement('div');
+      opt.className = 'language-option';
+      if (code === targetLanguage) opt.classList.add('selected');
+      opt.dataset.code = code;
+      opt.textContent = name;
+      targetOptions.appendChild(opt);
+    });
     applyDarkMode();
     updateCacheInfo();
     updateTranslationTitle();

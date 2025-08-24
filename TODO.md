@@ -1,5 +1,5 @@
 ## Features
-- [ ] Increase cache size to 500
+- [x] Increase cache size to 500
 - [ ] Remove caches on browser startup
 
 ## Bug Fixes

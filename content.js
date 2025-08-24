@@ -10,7 +10,7 @@
     translationsPerPage: 4,
     maxSynonyms: 6,
     maxAntonyms: 6,
-    cacheSize: 100,
+    cacheSize: 500,
     apiTimeout: 5000, // Reduced for faster responses
     debounceDelay: 100, // Debounce delay for selection events (ms)
     animationDuration: 300 // UI animation duration (ms)

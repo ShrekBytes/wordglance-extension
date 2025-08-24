@@ -1,8 +1,74 @@
+/*
+  Popup: Settings UI for WordGlance extension
+  Handles language selection, dark mode, cache management, and usage statistics
+*/
+
+// Shared utilities (inlined to avoid module import issues)
 const LANGUAGES = {
-  'auto': 'Auto-detect','en':'English','bn':'Bengali','es':'Spanish','fr':'French','de':'German','it':'Italian','pt':'Portuguese','ru':'Russian','ja':'Japanese','ko':'Korean','zh':'Chinese','ar':'Arabic','hi':'Hindi','tr':'Turkish','nl':'Dutch','sv':'Swedish','da':'Danish','no':'Norwegian','fi':'Finnish','pl':'Polish','cs':'Czech','sk':'Slovak','hu':'Hungarian','ro':'Romanian','bg':'Bulgarian','hr':'Croatian','sr':'Serbian','sl':'Slovenian','et':'Estonian','lv':'Latvian','lt':'Lithuanian','uk':'Ukrainian','el':'Greek','he':'Hebrew','th':'Thai','vi':'Vietnamese','id':'Indonesian','ms':'Malay','tl':'Filipino','sw':'Swahili','am':'Amharic','zu':'Zulu'
+  'auto': 'Auto-detect',
+  'en': 'English',
+  'bn': 'Bengali',
+  'es': 'Spanish',
+  'fr': 'French',
+  'de': 'German',
+  'it': 'Italian',
+  'pt': 'Portuguese',
+  'ru': 'Russian',
+  'ja': 'Japanese',
+  'ko': 'Korean',
+  'zh': 'Chinese',
+  'ar': 'Arabic',
+  'hi': 'Hindi',
+  'tr': 'Turkish',
+  'nl': 'Dutch',
+  'sv': 'Swedish',
+  'da': 'Danish',
+  'no': 'Norwegian',
+  'fi': 'Finnish',
+  'pl': 'Polish',
+  'cs': 'Czech',
+  'sk': 'Slovak',
+  'hu': 'Hungarian',
+  'ro': 'Romanian',
+  'bg': 'Bulgarian',
+  'hr': 'Croatian',
+  'sr': 'Serbian',
+  'sl': 'Slovenian',
+  'et': 'Estonian',
+  'lv': 'Latvian',
+  'lt': 'Lithuanian',
+  'uk': 'Ukrainian',
+  'el': 'Greek',
+  'he': 'Hebrew',
+  'th': 'Thai',
+  'vi': 'Vietnamese',
+  'id': 'Indonesian',
+  'ms': 'Malay',
+  'tl': 'Filipino',
+  'sw': 'Swahili',
+  'am': 'Amharic',
+  'zu': 'Zulu'
 };
 
-function getLanguageName(code) { return LANGUAGES[code] || code.toUpperCase(); }
+const STORAGE_KEYS = {
+  TARGET_LANGUAGE: 'wordglance-target-language',
+  SOURCE_LANGUAGE: 'wordglance-source-language',
+  DARK_MODE: 'wordglance-dark-mode',
+  TOTAL_WORDS_LEARNED: 'wordglance-total-words-learned',
+  CACHE_DEFINITIONS: 'wordglance-cache-definitions',
+  CACHE_TRANSLATIONS: 'wordglance-cache-translations'
+};
+
+const DEFAULT_VALUES = {
+  TARGET_LANGUAGE: 'en',
+  SOURCE_LANGUAGE: 'auto',
+  DARK_MODE: false,
+  TOTAL_WORDS_LEARNED: 0
+};
+
+function getLanguageName(code) { 
+  return LANGUAGES[code] || code.toUpperCase(); 
+}
 
 function renderLanguageOptions(el, includeAuto) {
   el.innerHTML = ''; // clear existing options
@@ -107,10 +173,10 @@ function setupSelector(root, prefix, isSource, currentCode, onChange) {
 }
 
 async function updateCacheInfo(el) {
-  const store = await browser.storage.local.get(['wordglance-cache-definitions','wordglance-cache-translations']);
+  const store = await browser.storage.local.get([STORAGE_KEYS.CACHE_DEFINITIONS, STORAGE_KEYS.CACHE_TRANSLATIONS]);
   let defs = 0, trans = 0;
-  try { const o = JSON.parse(store['wordglance-cache-definitions'] || '{}'); defs = Object.keys(o).length; } catch {}
-  try { const o = JSON.parse(store['wordglance-cache-translations'] || '{}'); trans = Object.keys(o).length; } catch {}
+  try { const o = JSON.parse(store[STORAGE_KEYS.CACHE_DEFINITIONS] || '{}'); defs = Object.keys(o).length; } catch (e) { console.warn('Cache parse error (definitions):', e); }
+  try { const o = JSON.parse(store[STORAGE_KEYS.CACHE_TRANSLATIONS] || '{}'); trans = Object.keys(o).length; } catch (e) { console.warn('Cache parse error (translations):', e); }
   el.textContent = `Definitions: ${defs}, Translations: ${trans}`;
 }
 
@@ -121,11 +187,11 @@ async function init() {
   const clearBtn = document.getElementById('clear-cache-btn');
   const usageNumber = document.getElementById('usage-number');
 
-  const store = await browser.storage.local.get(['wordglance-dark-mode','wordglance-source-language','wordglance-target-language','wordglance-total-words-learned']);
-  const isDark = !!store['wordglance-dark-mode'];
-  const sLang = store['wordglance-source-language'] || 'auto';
-  const tLang = store['wordglance-target-language'] || 'en';
-  const learned = store['wordglance-total-words-learned'] || 0;
+  const store = await browser.storage.local.get([STORAGE_KEYS.DARK_MODE, STORAGE_KEYS.SOURCE_LANGUAGE, STORAGE_KEYS.TARGET_LANGUAGE, STORAGE_KEYS.TOTAL_WORDS_LEARNED]);
+  const isDark = !!store[STORAGE_KEYS.DARK_MODE];
+  const sLang = store[STORAGE_KEYS.SOURCE_LANGUAGE] || DEFAULT_VALUES.SOURCE_LANGUAGE;
+  const tLang = store[STORAGE_KEYS.TARGET_LANGUAGE] || DEFAULT_VALUES.TARGET_LANGUAGE;
+  const learned = store[STORAGE_KEYS.TOTAL_WORDS_LEARNED] || DEFAULT_VALUES.TOTAL_WORDS_LEARNED;
 
   usageNumber.textContent = String(learned);
   darkToggle.checked = isDark;
@@ -140,7 +206,7 @@ async function init() {
   // Dark mode
   darkToggle.addEventListener('change', async () => {
     const v = !!darkToggle.checked;
-    await browser.storage.local.set({'wordglance-dark-mode': v});
+    await browser.storage.local.set({[STORAGE_KEYS.DARK_MODE]: v});
     if (v) {
       app.classList.add('dark-mode');
       document.body.classList.add('dark-page');
@@ -152,12 +218,12 @@ async function init() {
 
   // Selectors
   setupSelector(document, 'source', true, sLang, async (code) => {
-    await browser.storage.local.set({'wordglance-source-language': code});
+    await browser.storage.local.set({[STORAGE_KEYS.SOURCE_LANGUAGE]: code});
   });
   setupSelector(document, 'target', false, tLang, async (code) => {
-    await browser.storage.local.set({'wordglance-target-language': code});
+    await browser.storage.local.set({[STORAGE_KEYS.TARGET_LANGUAGE]: code});
     // Clear translation cache on target change
-    await browser.storage.local.set({'wordglance-cache-translations': '{}'});
+    await browser.storage.local.set({[STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}'});
     updateCacheInfo(cacheInfo);
   });
 
@@ -166,7 +232,11 @@ async function init() {
   clearBtn.addEventListener('click', async () => {
     const confirmed = confirm('Are you sure you want to clear all cached data and reset word counter?\n\nThis will delete:\n• All cached definitions and translations\n• Words learned counter\n\nThis action cannot be undone.');
     if (!confirmed) return;
-    await browser.storage.local.set({ 'wordglance-cache-definitions': '{}', 'wordglance-cache-translations': '{}', 'wordglance-total-words-learned': 0 });
+    await browser.storage.local.set({ 
+      [STORAGE_KEYS.CACHE_DEFINITIONS]: '{}', 
+      [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}', 
+      [STORAGE_KEYS.TOTAL_WORDS_LEARNED]: 0 
+    });
     usageNumber.textContent = '0';
     updateCacheInfo(cacheInfo);
   });

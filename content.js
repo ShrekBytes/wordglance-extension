@@ -1,6 +1,84 @@
 (() => {
   'use strict';
 
+  // Shared utilities (inlined to avoid module import issues in content scripts)
+  const LANGUAGES = {
+    'auto': 'Auto-detect',
+    'en': 'English',
+    'bn': 'Bengali',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'it': 'Italian',
+    'pt': 'Portuguese',
+    'ru': 'Russian',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'zh': 'Chinese',
+    'ar': 'Arabic',
+    'hi': 'Hindi',
+    'tr': 'Turkish',
+    'nl': 'Dutch',
+    'sv': 'Swedish',
+    'da': 'Danish',
+    'no': 'Norwegian',
+    'fi': 'Finnish',
+    'pl': 'Polish',
+    'cs': 'Czech',
+    'sk': 'Slovak',
+    'hu': 'Hungarian',
+    'ro': 'Romanian',
+    'bg': 'Bulgarian',
+    'hr': 'Croatian',
+    'sr': 'Serbian',
+    'sl': 'Slovenian',
+    'et': 'Estonian',
+    'lv': 'Latvian',
+    'lt': 'Lithuanian',
+    'uk': 'Ukrainian',
+    'el': 'Greek',
+    'he': 'Hebrew',
+    'th': 'Thai',
+    'vi': 'Vietnamese',
+    'id': 'Indonesian',
+    'ms': 'Malay',
+    'tl': 'Filipino',
+    'sw': 'Swahili',
+    'am': 'Amharic',
+    'zu': 'Zulu'
+  };
+
+  const STORAGE_KEYS = {
+    TARGET_LANGUAGE: 'wordglance-target-language',
+    SOURCE_LANGUAGE: 'wordglance-source-language',
+    DARK_MODE: 'wordglance-dark-mode',
+    TOTAL_WORDS_LEARNED: 'wordglance-total-words-learned',
+    CACHE_DEFINITIONS: 'wordglance-cache-definitions',
+    CACHE_TRANSLATIONS: 'wordglance-cache-translations'
+  };
+
+  const DEFAULT_VALUES = {
+    TARGET_LANGUAGE: 'en',
+    SOURCE_LANGUAGE: 'auto',
+    DARK_MODE: false,
+    TOTAL_WORDS_LEARNED: 0
+  };
+
+  const ERROR_MESSAGES = {
+    NO_DEFINITION: 'Definition not found',
+    NO_TRANSLATION: 'Translation not available',
+    NETWORK_ERROR: 'Connection error - please try again',
+    API_TIMEOUT: 'Request timed out - please try again',
+    PARSE_ERROR: 'Unable to process response',
+    INVALID_INPUT: 'Please select a valid word or phrase',
+    LANGUAGE_ERROR: 'Language not supported'
+  };
+
+  const createErrorMessage = (type, details = '') => {
+    const base = ERROR_MESSAGES[type] || 'Unknown error';
+    return details ? `${base}: ${details}` : base;
+  };
+
   // --------------------------- Config ---------------------------
   const CONFIG = {
     tooltipZIndex: 999999,
@@ -27,15 +105,17 @@
       }
     },
     async set(key, value) {
-      try { await browser.storage.local.set({ [key]: value }); } catch (e) {}
+      try { 
+        await browser.storage.local.set({ [key]: value }); 
+      } catch (e) {
+        console.warn('Storage set error:', e);
+      }
     }
   };
 
   // --------------------------- State ---------------------------
   let targetLanguage = 'bn';
   let sourceLanguage = 'auto';
-  let isDarkMode = false;
-  let totalWordsLearned = 0;
 
   // LRU caches
   const caches = {
@@ -55,33 +135,7 @@
     }
   }
 
-  // --------------------------- Languages ---------------------------
-  const LANGUAGES = {
-    'auto': 'Auto-detect',
-    'en': 'English','bn': 'Bengali','es': 'Spanish','fr': 'French','de': 'German',
-    'it': 'Italian','pt': 'Portuguese','ru': 'Russian','ja': 'Japanese','ko': 'Korean',
-    'zh': 'Chinese','ar': 'Arabic','hi': 'Hindi','tr': 'Turkish','nl': 'Dutch','sv': 'Swedish',
-    'da': 'Danish','no': 'Norwegian','fi': 'Finnish','pl': 'Polish','cs': 'Czech','sk': 'Slovak',
-    'hu': 'Hungarian','ro': 'Romanian','bg': 'Bulgarian','hr': 'Croatian','sr': 'Serbian',
-    'sl': 'Slovenian','et': 'Estonian','lv': 'Latvian','lt': 'Lithuanian','uk': 'Ukrainian',
-    'el': 'Greek','he': 'Hebrew','th': 'Thai','vi': 'Vietnamese','id': 'Indonesian','ms': 'Malay',
-    'tl': 'Filipino','sw': 'Swahili','am': 'Amharic','zu': 'Zulu'
-  };
-
-  const ERROR_MESSAGES = {
-    NO_DEFINITION: 'Definition not found',
-    NO_TRANSLATION: 'Translation not available',
-    NETWORK_ERROR: 'Connection error - please try again',
-    API_TIMEOUT: 'Request timed out - please try again',
-    PARSE_ERROR: 'Unable to process response',
-    INVALID_INPUT: 'Please select a valid word or phrase',
-    LANGUAGE_ERROR: 'Language not supported'
-  };
-
-  const createErrorMessage = (type, details = '') => {
-    const base = ERROR_MESSAGES[type] || 'Unknown error';
-    return details ? `${base}: ${details}` : base;
-  };
+  // Languages and error messages moved to shared utilities above
 
   // --------------------------- Shadow DOM root ---------------------------
   const host = document.createElement('div');
@@ -143,6 +197,7 @@
       transform: scale(0.8);
       will-change: transform, opacity;
       pointer-events: auto;
+      z-index: 999999;
     }
     /* Larger button for mobile devices */
     @media (hover: none) and (pointer: coarse) {
@@ -322,52 +377,7 @@
     .wordglance-tooltip .synonyms-list, .wordglance-tooltip .antonyms-list { color: #7f8c8d; font-style: italic; }
     .wordglance-tooltip.dark-mode .synonyms-list, .wordglance-tooltip.dark-mode .antonyms-list { color: #cccccc; }
 
-    /* Settings overlay */
-    .wordglance-settings { position:absolute; background:#fff; border:1px solid #e0e0e0; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.15); padding:16px; max-width:400px; min-width:350px; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:14px; display:none; pointer-events:auto; }
-    .wordglance-settings.dark-mode { background:#1a1a1a; border-color:#333; color:#e0e0e0; }
-    .wordglance-settings .close-button { position:absolute; top:8px; right:8px; background:none; border:none; font-size:18px; color:#95a5a6; cursor:pointer; padding:4px; line-height:1; }
-    .wordglance-settings .settings-header { font-weight:600; font-size:16px; color:#2c3e50; margin-bottom:12px; border-bottom:1px solid #ecf0f1; padding-bottom:8px; }
-    .wordglance-settings.dark-mode .settings-header { color:#fff; border-bottom-color:#444; }
-    .setting-section { margin-bottom:12px; }
-    .setting-item { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding:8px 0; }
-    .setting-label { color:#2c3e50; font-size:14px; }
-    .wordglance-settings.dark-mode .setting-label { color:#e0e0e0; }
-    .toggle-switch { position:relative; display:inline-block; width:44px; height:24px; }
-    .toggle-switch input { opacity:0; width:0; height:0; }
-    .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#bdc3c7; transition:all .3s; border-radius:24px; }
-    .toggle-slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:#fff; transition:all .3s; border-radius:50%; }
-    .toggle-switch input:checked + .toggle-slider { background:#3498db; }
-    .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
-    .language-selector { background:#f7fafc; border:1px solid #e2e8f0; border-radius:4px; padding:5px 25px 5px 6px; cursor:pointer; font-size:13px; color:#2c3e50; position:relative; min-width:140px; display:flex; align-items:center; justify-content:space-between; }
-    .language-selector::after { content:"▼"; position:absolute; right:8px; font-size:11px; color:#7f8c8d; pointer-events:none; }
-    .wordglance-settings.dark-mode .language-selector { background:#333; border-color:#666; color:#e0e0e0; }
-    .language-dropdown { position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #e2e8f0; border-radius:4px; margin-top:2px; max-height:200px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,.15); display:none; z-index:1000; }
-    .wordglance-settings.dark-mode .language-dropdown { background:#333; border-color:#666; }
-    .language-dropdown.open { display:block; }
-    .language-search { width:100%; padding:8px; border:none; border-bottom:1px solid #e2e8f0; font-size:12px; outline:none; background:#f7fafc; color:#2c3e50; }
-    .wordglance-settings.dark-mode .language-search { background:#2a2a2a; border-bottom-color:#666; color:#e0e0e0; }
-    .language-options { max-height:150px; overflow-y:auto; }
-    .language-option { padding:6px 8px; cursor:pointer; font-size:13px; color:#2c3e50; border-bottom:1px solid #f8f9fa; }
-    .wordglance-settings.dark-mode .language-option { color:#e0e0e0; border-bottom-color:#444; }
-    .language-option.selected { background:#3498db; color:#fff; }
-    .cache-button { background:#e74c3c; color:#fff; border:none; border-radius:4px; padding:6px 12px; cursor:pointer; font-size:12px; }
-    .cache-info { font-size:11px; color:#7f8c8d; margin-top:4px; font-style:italic; }
-    .usage-circle { width:100px; height:100px; border-radius:50%; border:2px solid #3498db; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#3498db; font-weight:bold; margin:0 auto; }
-    .usage-number { font-size:24px; line-height:1; }
-    .usage-label { font-size:10px; text-transform:lowercase; letter-spacing:.3px; margin-top:4px; }
-  .credit-section { border-top:1px solid #e0e0e0; padding-top:20px; margin-top:15px; text-align:center; }
-  .wordglance-settings.dark-mode .credit-section { border-top-color:#444; }
-  .help-link { display:block; margin-bottom:12px; color:#3498db; text-decoration:none; font-size:14px; }
-  .help-link:hover { color:#2980b9; }
-  .wordglance-settings.dark-mode .help-link { color:#5dade2; }
-  .wordglance-settings.dark-mode .help-link:hover { color:#85c1e9; }
-  .credit-text { font-size:13px; color:#7f8c8d; display:flex; align-items:center; justify-content:center; gap:5px; }
-  .wordglance-settings.dark-mode .credit-text { color:#ccc; }
-  .credit-link { color:#3498db; text-decoration:none; display:inline-flex; align-items:center; gap:4px; }
-  .credit-link:hover { color:#2980b9; }
-  .wordglance-settings.dark-mode .credit-link { color:#5dade2; }
-  .wordglance-settings.dark-mode .credit-link:hover { color:#85c1e9; }
-  .github-icon { width:16px; height:16px; vertical-align:middle; }
+    /* Settings overlay - REMOVED - handled by popup.js */
   `;
   shadow.appendChild(style);
 
@@ -382,7 +392,9 @@
   root.style.height = '100vh';
   shadow.appendChild(root);
 
-  function getLanguageName(code) { return LANGUAGES[code] || code.toUpperCase(); }
+  function getLanguageName(code) { 
+    return LANGUAGES[code] || code.toUpperCase(); 
+  }
 
   // Utility function for debouncing
   function debounce(func, wait) {
@@ -403,6 +415,8 @@
 const triggerIcon = document.createElement('button');
 triggerIcon.className = 'wordglance-trigger-icon';
 triggerIcon.textContent = '📖';
+triggerIcon.setAttribute('aria-label', 'Look up word definition and translation');
+triggerIcon.setAttribute('title', 'Click to look up this word');
 triggerIcon.style.display = 'none';
 triggerIcon.style.position = 'absolute';
 triggerIcon.style.pointerEvents = 'auto';
@@ -523,273 +537,30 @@ synContent.className = 'synonyms-antonyms-content';
 synSection.appendChild(synContent);
 tooltip.appendChild(synSection);
 
-// --------------------------- Settings Overlay ---------------------------
-const settings = document.createElement('div');
-settings.className = 'wordglance-settings';
-settings.style.display = 'none';
-root.appendChild(settings);
+// Settings overlay removed - handled by popup.js
 
-// Close button
-const closeBtn = document.createElement('button');
-closeBtn.className = 'close-button';
-closeBtn.textContent = '×';
-settings.appendChild(closeBtn);
-
-// Header
-const settingsHeader = document.createElement('div');
-settingsHeader.className = 'settings-header';
-settingsHeader.textContent = '⚙️ Settings';
-settings.appendChild(settingsHeader);
-
-// -------- Dark Mode Section --------
-const darkSection = document.createElement('div');
-darkSection.className = 'setting-section';
-const darkItem = document.createElement('div');
-darkItem.className = 'setting-item';
-const darkLabel = document.createElement('div');
-darkLabel.className = 'setting-label';
-darkLabel.textContent = 'Dark Mode';
-darkItem.appendChild(darkLabel);
-
-const toggleLabel = document.createElement('label');
-toggleLabel.className = 'toggle-switch';
-const toggleInput = document.createElement('input');
-toggleInput.type = 'checkbox';
-toggleInput.id = 'dark-mode-toggle';
-const toggleSlider = document.createElement('span');
-toggleSlider.className = 'toggle-slider';
-toggleLabel.appendChild(toggleInput);
-toggleLabel.appendChild(toggleSlider);
-darkItem.appendChild(toggleLabel);
-
-darkSection.appendChild(darkItem);
-settings.appendChild(darkSection);
-
-// -------- Source Language Section --------
-const sourceSection = document.createElement('div');
-sourceSection.className = 'setting-section';
-const sourceItem = document.createElement('div');
-sourceItem.className = 'setting-item';
-
-const sourceLabelWrapper = document.createElement('div');
-sourceLabelWrapper.className = 'setting-label';
-const sourceLabel = document.createElement('div');
-sourceLabel.textContent = 'From Language';
-const sourceCacheInfo = document.createElement('div');
-sourceCacheInfo.className = 'cache-info';
-sourceCacheInfo.textContent = 'Use auto for best experience';
-sourceLabelWrapper.appendChild(sourceLabel);
-sourceLabelWrapper.appendChild(sourceCacheInfo);
-sourceItem.appendChild(sourceLabelWrapper);
-
-// Language selector
-const sourceSelector = document.createElement('div');
-sourceSelector.className = 'language-selector';
-sourceSelector.id = 'source-language-selector';
-const sourceText = document.createElement('span');
-sourceText.className = 'language-text';
-sourceText.textContent = 'Auto-detect';
-const sourceDropdown = document.createElement('div');
-sourceDropdown.className = 'language-dropdown';
-sourceDropdown.id = 'source-language-dropdown';
-const sourceInput = document.createElement('input');
-sourceInput.type = 'text';
-sourceInput.className = 'language-search';
-sourceInput.id = 'source-language-search';
-sourceInput.placeholder = 'Search languages...';
-const sourceOptions = document.createElement('div');
-sourceOptions.className = 'language-options';
-sourceOptions.id = 'source-language-options';
-
-sourceDropdown.appendChild(sourceInput);
-sourceDropdown.appendChild(sourceOptions);
-sourceSelector.appendChild(sourceText);
-sourceSelector.appendChild(sourceDropdown);
-sourceItem.appendChild(sourceSelector);
-sourceSection.appendChild(sourceItem);
-settings.appendChild(sourceSection);
-
-// -------- Target Language Section --------
-const targetSection = document.createElement('div');
-targetSection.className = 'setting-section';
-const targetItem = document.createElement('div');
-targetItem.className = 'setting-item';
-
-const targetLabelWrapper = document.createElement('div');
-targetLabelWrapper.className = 'setting-label';
-const targetLabel = document.createElement('div');
-targetLabel.textContent = 'To Language';
-targetLabelWrapper.appendChild(targetLabel);
-targetItem.appendChild(targetLabelWrapper);
-
-const targetSelector = document.createElement('div');
-targetSelector.className = 'language-selector';
-targetSelector.id = 'target-language-selector';
-const targetText = document.createElement('span');
-targetText.className = 'language-text';
-targetText.textContent = getLanguageName(targetLanguage);
-const targetDropdown = document.createElement('div');
-targetDropdown.className = 'language-dropdown';
-targetDropdown.id = 'target-language-dropdown';
-const targetInput = document.createElement('input');
-targetInput.type = 'text';
-targetInput.className = 'language-search';
-targetInput.id = 'target-language-search';
-targetInput.placeholder = 'Search languages...';
-const targetOptions = document.createElement('div');
-targetOptions.className = 'language-options';
-targetOptions.id = 'target-language-options';
-
-targetDropdown.appendChild(targetInput);
-targetDropdown.appendChild(targetOptions);
-targetSelector.appendChild(targetText);
-targetSelector.appendChild(targetDropdown);
-targetItem.appendChild(targetSelector);
-targetSection.appendChild(targetItem);
-settings.appendChild(targetSection);
-
-// -------- Cache Section --------
-const cacheSection = document.createElement('div');
-cacheSection.className = 'setting-section';
-const cacheItem = document.createElement('div');
-cacheItem.className = 'setting-item';
-
-const cacheLabelWrapper = document.createElement('div');
-cacheLabelWrapper.className = 'setting-label';
-const cacheLabel = document.createElement('div');
-cacheLabel.textContent = 'Cache';
-const cacheInfo = document.createElement('div');
-cacheInfo.className = 'cache-info';
-cacheInfo.id = 'cache-info';
-cacheInfo.textContent = 'Loading...';
-cacheLabelWrapper.appendChild(cacheLabel);
-cacheLabelWrapper.appendChild(cacheInfo);
-cacheItem.appendChild(cacheLabelWrapper);
-
-const cacheBtn = document.createElement('button');
-cacheBtn.className = 'cache-button';
-cacheBtn.id = 'clear-cache-btn';
-cacheBtn.textContent = 'Clear';
-cacheItem.appendChild(cacheBtn);
-
-cacheSection.appendChild(cacheItem);
-settings.appendChild(cacheSection);
-
-// -------- Usage Section --------
-const usageSection = document.createElement('div');
-usageSection.className = 'setting-section';
-const usageCircle = document.createElement('div');
-usageCircle.className = 'usage-circle';
-const usageNumber = document.createElement('div');
-usageNumber.className = 'usage-number';
-usageNumber.textContent = '0';
-const usageLabel = document.createElement('div');
-usageLabel.className = 'usage-label';
-usageLabel.textContent = 'words learned';
-usageCircle.appendChild(usageNumber);
-usageCircle.appendChild(usageLabel);
-usageSection.appendChild(usageCircle);
-settings.appendChild(usageSection);
-
-// -------- Credit Section --------
-const creditSection = document.createElement('div');
-creditSection.className = 'credit-section';
-const helpLink = document.createElement('a');
-helpLink.href = 'https://github.com/ShrekBytes/WordGlance/issues';
-helpLink.target = '_blank';
-helpLink.className = 'help-link';
-helpLink.textContent = 'Need help?';
-creditSection.appendChild(helpLink);
-
-const creditText = document.createElement('div');
-creditText.className = 'credit-text';
-creditText.textContent = 'Made by ';
-
-const creditLink = document.createElement('a');
-creditLink.href = 'https://github.com/ShrekBytes/WordGlance';
-creditLink.target = '_blank';
-creditLink.className = 'credit-link';
-
-// GitHub icon SVG
-creditLink.innerHTML = `
-<svg class="github-icon" viewBox="0 0 16 16" fill="currentColor">
-<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-</svg>
-ShrekBytes
-`;
-
-creditText.appendChild(creditLink);
-creditSection.appendChild(creditText);
-settings.appendChild(creditSection);
-
-// Apply dark mode function
-function applyDarkMode() {
-  if (isDarkMode) {
-    triggerIcon.classList.add('dark-mode');
-    tooltip.classList.add('dark-mode');
-    settings.classList.add('dark-mode');
-  } else {
-    triggerIcon.classList.remove('dark-mode');
-    tooltip.classList.remove('dark-mode');
-    settings.classList.remove('dark-mode');
-  }
-}
+// Dark mode function removed - handled by popup.js
 
 
   // --------------------------- Load persisted settings ---------------------------
   (async function initSettings() {
-    targetLanguage = await storage.get('wordglance-target-language', 'en');
-    sourceLanguage = await storage.get('wordglance-source-language', 'auto');
-    isDarkMode = await storage.get('wordglance-dark-mode', false);
-    totalWordsLearned = await storage.get('wordglance-total-words-learned', 0);
-    // load caches
+    targetLanguage = await storage.get(STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE);
+    sourceLanguage = await storage.get(STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE);
+    // Load caches
     try {
-      const d = await storage.get('wordglance-cache-definitions', '{}');
-      const t = await storage.get('wordglance-cache-translations', '{}');
+      const d = await storage.get(STORAGE_KEYS.CACHE_DEFINITIONS, '{}');
+      const t = await storage.get(STORAGE_KEYS.CACHE_TRANSLATIONS, '{}');
       const def = JSON.parse(d); const tra = JSON.parse(t);
       Object.keys(def).forEach(k => lruAdd(caches.definitions, k, def[k]));
       Object.keys(tra).forEach(k => lruAdd(caches.translations, k, tra[k]));
-    } catch {}
+    } catch (e) {
+      console.warn('Cache loading error:', e);
+    }
 
-    // update UI
-    settings.querySelector('#dark-mode-toggle').checked = isDarkMode;
-    settings.querySelector('.usage-number').textContent = String(totalWordsLearned);
-    settings.querySelector('#source-language-selector .language-text').textContent = getLanguageName(sourceLanguage);
-    settings.querySelector('#target-language-selector .language-text').textContent = getLanguageName(targetLanguage);
-    const sourceOptions = settings.querySelector('#source-language-options');
-    sourceOptions.textContent = ''; // clear
-    
-    Object.entries(LANGUAGES).forEach(([code, name]) => {
-      const opt = document.createElement('div');
-      opt.className = 'language-option';
-      if (code === sourceLanguage) opt.classList.add('selected');
-      opt.dataset.code = code;
-      opt.textContent = name;
-      sourceOptions.appendChild(opt);
-    });
-    const targetOptions = settings.querySelector('#target-language-options');
-    targetOptions.textContent = ''; // clear
-
-    Object.entries(LANGUAGES).filter(([c])=>c!=='auto').forEach(([code, name]) => {
-      const opt = document.createElement('div');
-      opt.className = 'language-option';
-      if (code === targetLanguage) opt.classList.add('selected');
-      opt.dataset.code = code;
-      opt.textContent = name;
-      targetOptions.appendChild(opt);
-    });
-    applyDarkMode();
-    updateCacheInfo();
     updateTranslationTitle();
   })();
 
-  function updateCacheInfo() {
-    const info = settings.querySelector('#cache-info');
-    if (!info) return;
-    const defs = caches.definitions.size;
-    const trans = caches.translations.size;
-    info.textContent = `Definitions: ${defs}, Translations: ${trans}`;
-  }
+
 
   // --------------------------- Selection handling ---------------------------
   let currentSelection = '';
@@ -826,6 +597,8 @@ function applyDarkMode() {
     return s;
   }
 
+
+
   function getSelectionInfo() {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return null;
@@ -836,7 +609,10 @@ function applyDarkMode() {
       const rect = range.getBoundingClientRect();
       if (!rect || (rect.width === 0 && rect.height === 0)) return null;
       return { text, range, rect };
-    } catch { return null; }
+    } catch (e) {
+    console.warn('Selection range error:', e);
+    return null;
+  }
   }
 
   function positionTriggerIcon(x, y) {
@@ -919,7 +695,10 @@ function applyDarkMode() {
 
   function onSelectionEvent() {
     const info = getSelectionInfo();
-    if (!info) { hideTrigger(); return; }
+    if (!info) { 
+      hideTrigger(); 
+      return; 
+    }
     currentSelection = info.text;
     selectionRect = info.rect;
     selectionRange = info.range;
@@ -960,13 +739,20 @@ function applyDarkMode() {
       clearTimeout(to);
       try {
         const resp = await browser.runtime.sendMessage({ type: 'WORDGLANCE_FETCH', url, init });
-        if (!resp) throw new Error('No response');
+        if (!resp) throw new Error('No response from background script');
         return {
           ok: resp.ok,
           status: resp.status,
           statusText: resp.statusText,
           text: async () => resp.text,
-          json: async () => { try { return JSON.parse(resp.text); } catch (err) { throw err; } }
+          json: async () => { 
+            try { 
+              return JSON.parse(resp.text); 
+            } catch (err) { 
+              console.warn('JSON parse error:', err);
+              throw new Error('Invalid JSON response'); 
+            } 
+          }
         };
       } catch (e2) {
         throw e2;
@@ -977,14 +763,16 @@ function applyDarkMode() {
   function saveCaches() {
     const defObj = Object.fromEntries(caches.definitions.entries());
     const transObj = Object.fromEntries(caches.translations.entries());
-    storage.set('wordglance-cache-definitions', JSON.stringify(defObj));
-    storage.set('wordglance-cache-translations', JSON.stringify(transObj));
+    storage.set(STORAGE_KEYS.CACHE_DEFINITIONS, JSON.stringify(defObj));
+    storage.set(STORAGE_KEYS.CACHE_TRANSLATIONS, JSON.stringify(transObj));
   }
 
   // Cancel active requests to prevent race conditions
   function cancelActiveRequests() {
     activeRequests.clear();
   }
+
+
 
   async function fetchDefinition(word) {
     // Check cache first for instant response
@@ -1433,10 +1221,6 @@ function applyDarkMode() {
     try {
       const tr = await fetchTranslation(currentSelection);
       renderTranslationPages(tr.translations);
-      // learned count heuristic: increment once per show
-      totalWordsLearned += 1;
-      storage.set('wordglance-total-words-learned', totalWordsLearned);
-      settings.querySelector('.usage-number').textContent = String(totalWordsLearned);
     } catch (err) {
       if (trSlider) {
         trSlider.textContent = ''; // clear
@@ -1458,142 +1242,7 @@ function applyDarkMode() {
 
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideTooltip(); hideTrigger(true); } });
 
-  // --------------------------- Settings interactions ---------------------------
-  function openSettings() {
-    // center in viewport
-    const rect = { w: window.innerWidth, h: window.innerHeight };
-    settings.style.left = `${(rect.w - 380) / 2}px`;
-    settings.style.top = `${(rect.h - 300) / 2}px`;
-    settings.style.display = 'block';
-  }
-  function closeSettings() { settings.style.display = 'none'; }
-  settings.querySelector('.close-button').addEventListener('click', closeSettings);
-
-  // dark mode
-  settings.querySelector('#dark-mode-toggle').addEventListener('change', async (e) => {
-    isDarkMode = !!e.target.checked;
-    await storage.set('wordglance-dark-mode', isDarkMode);
-    applyDarkMode();
-  });
-
-  function setupLangSelector(prefix, isSource) {
-    const selector = settings.querySelector(`#${prefix}-language-selector`);
-    const dropdown = settings.querySelector(`#${prefix}-language-dropdown`);
-    const search = settings.querySelector(`#${prefix}-language-search`);
-    const options = settings.querySelector(`#${prefix}-language-options`);
-    const label = selector.querySelector('.language-text');
-
-    function filter() {
-      const q = search.value.toLowerCase();
-      Array.from(options.children).forEach(opt => {
-        const t = opt.textContent.toLowerCase();
-        const c = opt.dataset.code.toLowerCase();
-        opt.style.display = (t.includes(q) || c.includes(q)) ? '' : 'none';
-      });
-    }
-
-    selector.addEventListener('click', (e) => {
-      // Don't toggle if clicking on the dropdown itself
-      if (!dropdown.contains(e.target)) {
-        e.stopPropagation();
-        
-        // Close other dropdown first
-        const otherPrefix = prefix === 'source' ? 'target' : 'source';
-        const otherDropdown = settings.querySelector(`#${otherPrefix}-language-dropdown`);
-        if (otherDropdown) {
-          otherDropdown.classList.remove('open');
-          const otherSearch = settings.querySelector(`#${otherPrefix}-language-search`);
-          if (otherSearch) {
-            otherSearch.value = '';
-            const otherOptions = settings.querySelector(`#${otherPrefix}-language-options`);
-            if (otherOptions) {
-              Array.from(otherOptions.children).forEach(opt => opt.style.display = '');
-            }
-          }
-        }
-        
-        dropdown.classList.toggle('open');
-        if (dropdown.classList.contains('open')) {
-          // Focus search input when dropdown opens with small delay
-          setTimeout(() => search.focus(), 50);
-        }
-      }
-    });
-
-    // Prevent dropdown from closing when clicking inside it
-    dropdown.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
-
-    search.addEventListener('input', filter);
-
-    // Handle Escape key in search
-    search.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        dropdown.classList.remove('open');
-        search.value = '';
-        Array.from(options.children).forEach(opt => opt.style.display = '');
-      }
-    });
-
-    options.addEventListener('click', async (e) => {
-      const opt = e.target.closest('.language-option');
-      if (!opt) return;
-      
-      const newCode = opt.dataset.code;
-      const currentCode = isSource ? sourceLanguage : targetLanguage;
-      
-      if (newCode !== currentCode) {
-        options.querySelectorAll('.language-option.selected').forEach(n => n.classList.remove('selected'));
-        opt.classList.add('selected');
-        
-        if (isSource) {
-          sourceLanguage = newCode; 
-          await storage.set('wordglance-source-language', sourceLanguage);
-        } else {
-          targetLanguage = newCode; 
-          await storage.set('wordglance-target-language', targetLanguage);
-          // clear translation cache on target change
-          caches.translations.clear(); 
-          saveCaches();
-        }
-        
-        label.textContent = getLanguageName(newCode);
-        updateTranslationTitle();
-      }
-      
-      // Clear search and close dropdown
-      dropdown.classList.remove('open');
-      search.value = '';
-      Array.from(options.children).forEach(opt => opt.style.display = '');
-    });
-
-    // close on outside click but don't interfere with other dropdowns
-    document.addEventListener('click', (e) => {
-      if (!selector.contains(e.target) && !dropdown.contains(e.target)) {
-        dropdown.classList.remove('open');
-        search.value = '';
-        Array.from(options.children).forEach(opt => opt.style.display = '');
-      }
-    });
-  }
-  setupLangSelector('source', true);
-  setupLangSelector('target', false);
-
-  // clear cache
-  settings.querySelector('#clear-cache-btn').addEventListener('click', async () => {
-    const confirmed = confirm('Are you sure you want to clear all cached data and reset word counter?\n\nThis will delete:\n• All cached definitions and translations\n• Words learned counter\n\nThis action cannot be undone.');
-    if (!confirmed) return;
-    caches.definitions.clear(); caches.translations.clear(); saveCaches();
-    totalWordsLearned = 0; await storage.set('wordglance-total-words-learned', totalWordsLearned);
-    settings.querySelector('.usage-number').textContent = '0';
-    updateCacheInfo();
-  });
-
-  // open settings on message or command
-  browser.runtime.onMessage.addListener((msg) => {
-    if (msg && msg.type === 'WORDGLANCE_OPEN_SETTINGS') openSettings();
-  });
+  // Settings interactions removed - handled by popup.js
 
   // --------------------------- Utilities ---------------------------
   function escapeHtml(str) {
@@ -1602,24 +1251,27 @@ function applyDarkMode() {
 
   // Initial console
   console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
-  console.log(`WordGlance v2.1.0 initialized with:
+  console.log(`WordGlance v2.3.0 (optimized) initialized with:
   - ${Object.keys(LANGUAGES).length} supported languages
   - ${CONFIG.cacheSize} item cache per type
-  - Fast API response optimizations`);
+  - Fast API response optimizations
+  - Consolidated utilities and constants
+  - Settings handled by popup.js`);
+
+
+  
+
+  
+
 
   // pointer-events management: only the controls should receive events
-  [tooltip, settings, triggerIcon].forEach(el => el.style.pointerEvents = 'auto');
-
-  // Shadow root: clicking outside settings closes it
-  shadow.addEventListener('click', (e) => {
-    if (e.target === shadow) closeSettings();
-  });
+  [tooltip, triggerIcon].forEach(el => el.style.pointerEvents = 'auto');
 
   // Show button upon selection; hide when user clicks outside shadow content
   document.addEventListener('click', (e) => {
     const path = e.composedPath();
     // clicks inside shadow UI
-    if (path.includes(tooltip) || path.includes(triggerIcon) || path.includes(settings)) return;
+    if (path.includes(tooltip) || path.includes(triggerIcon)) return;
     // outside -> hide tooltip; keep trigger only if selection still exists
     hideTooltip();
     const sel = window.getSelection();

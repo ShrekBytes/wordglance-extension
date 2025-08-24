@@ -1,32 +1,7 @@
 /*
-  Background: context menu + keyboard command + optional fetch proxy
+  Background Script: Network proxy for WordGlance extension
+  Provides fetch functionality for content scripts when direct API calls are blocked
 */
-
-const MENU_ID_SETTINGS = "wordglance-settings";
-
-browser.runtime.onInstalled.addListener(() => {
-  // Create context menu to open settings UI in-page via content script
-  browser.menus.create({
-    id: MENU_ID_SETTINGS,
-    title: "WordGlance Settings",
-    contexts: ["all"]
-  });
-});
-
-browser.menus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === MENU_ID_SETTINGS && tab && tab.id) {
-    browser.tabs.sendMessage(tab.id, { type: "WORDGLANCE_OPEN_SETTINGS" }).catch(() => {});
-  }
-});
-
-browser.commands.onCommand.addListener(async (command) => {
-  if (command === "wordglance-open-settings") {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.id) {
-      browser.tabs.sendMessage(tab.id, { type: "WORDGLANCE_OPEN_SETTINGS" }).catch(() => {});
-    }
-  }
-});
 
 // Optional network proxy if target sites block XHR from content script.
 // Content script can use runtime.sendMessage({type:'fetch', url, init}) and receive {ok,status,headers,text}.

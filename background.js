@@ -10,7 +10,7 @@ const CONFIG = {
   maxSynonyms: 6,
   maxAntonyms: 6,
   cacheSize: 500,
-  apiTimeout: 5000
+  apiTimeout: 100000
 };
 
 // State management

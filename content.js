@@ -94,6 +94,7 @@
       transition: opacity 0.3s ease, transform 0.3s ease; word-wrap: break-word;
       overflow-wrap: break-word; opacity: 0; transform: translateY(-10px) scale(0.95);
       will-change: transform, opacity; color: #2c3e50; contain: layout style paint;
+      z-index: 99999;
     }
     .wordglance-tooltip.show { opacity: 1; transform: translateY(0) scale(1); }
     .wordglance-tooltip.dark-mode { 
@@ -107,7 +108,7 @@
       cursor: pointer; display: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
       transition: transform 0.25s ease, background-color 0.25s ease; font-weight: bold;
       opacity: 0; transform: scale(0.8); will-change: transform, opacity;
-      pointer-events: auto; z-index: 999999;
+      pointer-events: auto; z-index: 9999;
     }
     @media (hover: none) and (pointer: coarse) {
       .wordglance-trigger-icon { width: 32px; height: 32px; font-size: 16px; }

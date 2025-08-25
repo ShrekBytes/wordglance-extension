@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "WordGlance - Dictionary & Translation",
-  "version": "2.3.0",
+  "version": "2.5.0",
   "description": "Get instant dictionary definitions and translations for any text on any website!",
   "icons": {
     "16": "assets/icon_16.png",
@@ -16,7 +16,7 @@
     "https://ftapi.pythonanywhere.com/*"
   ],
   "background": {
-    "scripts": ["background.js"],
+    "scripts": ["shared-constants.js", "background.js"],
     "persistent": false
   },
   "browser_action": {
@@ -31,7 +31,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["shared-constants.js", "content.js"],
       "run_at": "document_end"
     }
   ],

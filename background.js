@@ -195,7 +195,7 @@ async function fetchTranslation(text) {
   if (settings.sourceLanguage !== 'auto') params.set('sl', settings.sourceLanguage);
   
   try {
-    const res = await xfetch(`https://ftapi.pythonanywhere.com/translate?${params}`);
+    const res = await xfetch(`https://translation-1e79fb3f3adb.herokuapp.com/translate?${params}`);
     
     if (!activeRequests.has(requestId)) return;
     activeRequests.delete(requestId);

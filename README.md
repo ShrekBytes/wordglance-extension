@@ -167,7 +167,7 @@ The extension uses browser storage for user preferences:
 ### APIs used
 
 - **Dictionary**: [Dictionary API](https://dictionaryapi.dev/) - Free English dictionary
-- **Translation**: [Free Translate API](https://ftapi.pythonanywhere.com/) - Multi-language translation
+- **Translation**: [Free Translate API](https://translation-1e79fb3f3adb.herokuapp.com/) - Multi-language translation
 
 _Special thanks to these amazing free APIs that make WordGlance possible!_
 

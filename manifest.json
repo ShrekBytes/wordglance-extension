@@ -13,7 +13,7 @@
     "storage",
     "activeTab",
     "https://api.dictionaryapi.dev/*",
-    "https://ftapi.pythonanywhere.com/*"
+    "https://translation-1e79fb3f3adb.herokuapp.com/*"
   ],
   "background": {
     "scripts": ["shared-constants.js", "background.js"],

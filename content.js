@@ -2,20 +2,6 @@
   'use strict';
 
   // Constants
-  const LANGUAGES = {
-    'auto': 'Auto-detect', 'en': 'English', 'bn': 'Bengali', 'es': 'Spanish',
-    'fr': 'French', 'de': 'German', 'it': 'Italian', 'pt': 'Portuguese',
-    'ru': 'Russian', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese',
-    'ar': 'Arabic', 'hi': 'Hindi', 'tr': 'Turkish', 'nl': 'Dutch',
-    'sv': 'Swedish', 'da': 'Danish', 'no': 'Norwegian', 'fi': 'Finnish',
-    'pl': 'Polish', 'cs': 'Czech', 'sk': 'Slovak', 'hu': 'Hungarian',
-    'ro': 'Romanian', 'bg': 'Bulgarian', 'hr': 'Croatian', 'sr': 'Serbian',
-    'sl': 'Slovenian', 'et': 'Estonian', 'lv': 'Latvian', 'lt': 'Lithuanian',
-    'uk': 'Ukrainian', 'el': 'Greek', 'he': 'Hebrew', 'th': 'Thai',
-    'vi': 'Vietnamese', 'id': 'Indonesian', 'ms': 'Malay', 'tl': 'Filipino',
-    'sw': 'Swahili', 'am': 'Amharic', 'zu': 'Zulu'
-  };
-
   const STORAGE_KEYS = {
     TARGET_LANGUAGE: 'wordglance-target-language',
     SOURCE_LANGUAGE: 'wordglance-source-language',
@@ -42,7 +28,7 @@
   };
 
   // State
-  let targetLanguage = 'bn';
+  let targetLanguage = 'en';
   let sourceLanguage = 'auto';
   let currentSelection = '';
   let selectionRect = null;
@@ -60,24 +46,6 @@
   let activeRequests = new Set();
 
   // Utilities
-  const storage = {
-    async get(key, fallback) {
-      try {
-        const obj = await browser.storage.local.get(key);
-        return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : fallback;
-      } catch (e) {
-        return fallback;
-      }
-    },
-    async set(key, value) {
-      try { 
-        await browser.storage.local.set({ [key]: value }); 
-      } catch (e) {
-        console.warn('Storage set error:', e);
-      }
-    }
-  };
-
   function lruAdd(map, key, value) {
     if (map.has(key)) map.delete(key);
     map.set(key, value);
@@ -332,27 +300,61 @@
 
   buildTooltipStructure();
 
-  // Initialize settings
-  async function initSettings() {
-    targetLanguage = await storage.get(STORAGE_KEYS.TARGET_LANGUAGE, 'bn');
-    sourceLanguage = await storage.get(STORAGE_KEYS.SOURCE_LANGUAGE, 'auto');
-    
+  // Settings initialization and management
+  async function loadSettings() {
     try {
-      const [defCache, transCache] = await Promise.all([
-        storage.get(STORAGE_KEYS.CACHE_DEFINITIONS, '{}'),
-        storage.get(STORAGE_KEYS.CACHE_TRANSLATIONS, '{}')
+      const settings = await browser.storage.local.get([
+        STORAGE_KEYS.TARGET_LANGUAGE,
+        STORAGE_KEYS.SOURCE_LANGUAGE
       ]);
       
-      Object.entries(JSON.parse(defCache)).forEach(([k, v]) => lruAdd(caches.definitions, k, v));
-      Object.entries(JSON.parse(transCache)).forEach(([k, v]) => lruAdd(caches.translations, k, v));
+      targetLanguage = settings[STORAGE_KEYS.TARGET_LANGUAGE] || 'en';
+      sourceLanguage = settings[STORAGE_KEYS.SOURCE_LANGUAGE] || 'auto';
+      updateTranslationTitle();
+    } catch (e) {
+      console.warn('Failed to load settings:', e);
+    }
+  }
+
+  async function loadCaches() {
+    try {
+      const [defCache, transCache] = await Promise.all([
+        browser.storage.local.get(STORAGE_KEYS.CACHE_DEFINITIONS),
+        browser.storage.local.get(STORAGE_KEYS.CACHE_TRANSLATIONS)
+      ]);
+      
+      if (defCache[STORAGE_KEYS.CACHE_DEFINITIONS]) {
+        const defs = JSON.parse(defCache[STORAGE_KEYS.CACHE_DEFINITIONS]);
+        Object.entries(defs).forEach(([k, v]) => lruAdd(caches.definitions, k, v));
+      }
+      
+      if (transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]) {
+        const trans = JSON.parse(transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]);
+        Object.entries(trans).forEach(([k, v]) => lruAdd(caches.translations, k, v));
+      }
     } catch (e) {
       console.warn('Cache loading error:', e);
     }
-
-    updateTranslationTitle();
   }
 
-  initSettings();
+  // Listen for storage changes from popup
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    
+    if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
+      targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue || 'en';
+      updateTranslationTitle();
+    }
+    
+    if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
+      sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue || 'auto';
+      updateTranslationTitle();
+    }
+  });
+
+  // Initialize
+  loadSettings();
+  loadCaches();
 
   // Selection handling
   function getSelectionInfo() {
@@ -502,8 +504,17 @@
   }
 
   function saveCaches() {
-    storage.set(STORAGE_KEYS.CACHE_DEFINITIONS, JSON.stringify(Object.fromEntries(caches.definitions)));
-    storage.set(STORAGE_KEYS.CACHE_TRANSLATIONS, JSON.stringify(Object.fromEntries(caches.translations)));
+    try {
+      const defObj = Object.fromEntries(caches.definitions);
+      const transObj = Object.fromEntries(caches.translations);
+      
+      browser.storage.local.set({
+        [STORAGE_KEYS.CACHE_DEFINITIONS]: JSON.stringify(defObj),
+        [STORAGE_KEYS.CACHE_TRANSLATIONS]: JSON.stringify(transObj)
+      });
+    } catch (e) {
+      console.warn('Cache save error:', e);
+    }
   }
 
   async function fetchDefinition(word) {
@@ -617,8 +628,8 @@
   function updateTranslationTitle() {
     const titleEl = tooltip.querySelector('.translation-title');
     if (titleEl) {
-      const sourceName = sourceLanguage === 'auto' ? 'Auto' : LANGUAGES[sourceLanguage] || sourceLanguage.toUpperCase();
-      const targetName = LANGUAGES[targetLanguage] || targetLanguage.toUpperCase();
+      const sourceName = sourceLanguage === 'auto' ? 'Auto' : sourceLanguage.toUpperCase();
+      const targetName = targetLanguage.toUpperCase();
       titleEl.textContent = `${sourceName} → ${targetName}`;
     }
   }

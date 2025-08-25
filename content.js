@@ -52,6 +52,28 @@
     }
   }
 
+  // Function to reset tooltip state when settings change
+  function resetTooltipState() {
+    // Clear any active requests
+    activeRequests.clear();
+    
+    // Hide tooltip and trigger if they're visible
+    hideTooltip();
+    hideTrigger();
+    
+    // Reset pagination state
+    currentDefinitionPage = 0;
+    currentTranslationPage = 0;
+    definitionPages = [];
+    translationPages = [];
+    definitionPageHeights = [];
+    translationPageHeights = [];
+    
+    // Clear current selection
+    currentSelection = '';
+    selectionRect = null;
+  }
+
   // Listen for storage changes from popup
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
@@ -59,11 +81,15 @@
     if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
       settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue || DEFAULT_VALUES.TARGET_LANGUAGE;
       updateTranslationTitle();
+      // Reset state when target language changes
+      resetTooltipState();
     }
     
     if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
       settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue || DEFAULT_VALUES.SOURCE_LANGUAGE;
       updateTranslationTitle();
+      // Reset state when source language changes
+      resetTooltipState();
     }
     
     if (changes[STORAGE_KEYS.DARK_MODE]) {

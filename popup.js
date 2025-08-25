@@ -3,51 +3,19 @@
   Handles language selection, dark mode, cache management, and usage statistics
 */
 
-// Shared utilities (inlined to avoid module import issues)
+// Constants
 const LANGUAGES = {
-  'auto': 'Auto-detect',
-  'en': 'English',
-  'bn': 'Bengali',
-  'es': 'Spanish',
-  'fr': 'French',
-  'de': 'German',
-  'it': 'Italian',
-  'pt': 'Portuguese',
-  'ru': 'Russian',
-  'ja': 'Japanese',
-  'ko': 'Korean',
-  'zh': 'Chinese',
-  'ar': 'Arabic',
-  'hi': 'Hindi',
-  'tr': 'Turkish',
-  'nl': 'Dutch',
-  'sv': 'Swedish',
-  'da': 'Danish',
-  'no': 'Norwegian',
-  'fi': 'Finnish',
-  'pl': 'Polish',
-  'cs': 'Czech',
-  'sk': 'Slovak',
-  'hu': 'Hungarian',
-  'ro': 'Romanian',
-  'bg': 'Bulgarian',
-  'hr': 'Croatian',
-  'sr': 'Serbian',
-  'sl': 'Slovenian',
-  'et': 'Estonian',
-  'lv': 'Latvian',
-  'lt': 'Lithuanian',
-  'uk': 'Ukrainian',
-  'el': 'Greek',
-  'he': 'Hebrew',
-  'th': 'Thai',
-  'vi': 'Vietnamese',
-  'id': 'Indonesian',
-  'ms': 'Malay',
-  'tl': 'Filipino',
-  'sw': 'Swahili',
-  'am': 'Amharic',
-  'zu': 'Zulu'
+  'auto': 'Auto-detect', 'en': 'English', 'bn': 'Bengali', 'es': 'Spanish',
+  'fr': 'French', 'de': 'German', 'it': 'Italian', 'pt': 'Portuguese',
+  'ru': 'Russian', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese',
+  'ar': 'Arabic', 'hi': 'Hindi', 'tr': 'Turkish', 'nl': 'Dutch',
+  'sv': 'Swedish', 'da': 'Danish', 'no': 'Norwegian', 'fi': 'Finnish',
+  'pl': 'Polish', 'cs': 'Czech', 'sk': 'Slovak', 'hu': 'Hungarian',
+  'ro': 'Romanian', 'bg': 'Bulgarian', 'hr': 'Croatian', 'sr': 'Serbian',
+  'sl': 'Slovenian', 'et': 'Estonian', 'lv': 'Latvian', 'lt': 'Lithuanian',
+  'uk': 'Ukrainian', 'el': 'Greek', 'he': 'Hebrew', 'th': 'Thai',
+  'vi': 'Vietnamese', 'id': 'Indonesian', 'ms': 'Malay', 'tl': 'Filipino',
+  'sw': 'Swahili', 'am': 'Amharic', 'zu': 'Zulu'
 };
 
 const STORAGE_KEYS = {
@@ -66,182 +34,219 @@ const DEFAULT_VALUES = {
   TOTAL_WORDS_LEARNED: 0
 };
 
-function getLanguageName(code) { 
-  return LANGUAGES[code] || code.toUpperCase(); 
+// Utilities
+const getLanguageName = (code) => LANGUAGES[code] || code.toUpperCase();
+
+function renderLanguageOptions(container, includeAuto) {
+  container.innerHTML = '';
+  Object.entries(LANGUAGES)
+    .filter(([code]) => includeAuto || code !== 'auto')
+    .forEach(([code, name]) => {
+      const div = document.createElement('div');
+      div.className = 'language-option';
+      div.dataset.code = code;
+      div.textContent = name;
+      container.appendChild(div);
+    });
 }
 
-function renderLanguageOptions(el, includeAuto) {
-  el.innerHTML = ''; // clear existing options
-  const entries = Object.entries(LANGUAGES).filter(([c]) => includeAuto || c !== 'auto');
-
-  entries.forEach(([code, name]) => {
-    const div = document.createElement('div');
-    div.className = 'language-option';
-    div.dataset.code = code;
-    div.textContent = name; // safe! no HTML parsing
-    el.appendChild(div);
-  });
+function closeDropdown(prefix) {
+  const dropdown = document.querySelector(`#${prefix}-language-dropdown`);
+  const search = document.querySelector(`#${prefix}-language-search`);
+  const options = document.querySelector(`#${prefix}-language-options`);
+  
+  if (dropdown) dropdown.classList.remove('open');
+  if (search) search.value = '';
+  if (options) {
+    options.querySelectorAll('.language-option').forEach(opt => opt.style.display = '');
+  }
 }
 
-function setupSelector(root, prefix, isSource, currentCode, onChange) {
-  const selector = root.querySelector(`#${prefix}-language-selector`);
-  const dropdown = root.querySelector(`#${prefix}-language-dropdown`);
-  const search = root.querySelector(`#${prefix}-language-search`);
-  const options = root.querySelector(`#${prefix}-language-options`);
-  const label = root.querySelector(`#${prefix}-language-text`);
+function setupSelector(prefix, isSource, currentCode, onChange) {
+  const elements = {
+    selector: document.querySelector(`#${prefix}-language-selector`),
+    dropdown: document.querySelector(`#${prefix}-language-dropdown`),
+    search: document.querySelector(`#${prefix}-language-search`),
+    options: document.querySelector(`#${prefix}-language-options`),
+    label: document.querySelector(`#${prefix}-language-text`)
+  };
 
-  label.textContent = getLanguageName(currentCode);
-  renderLanguageOptions(options, isSource);
-  // mark selected
-  options.querySelectorAll('.language-option').forEach(opt => {
-    if (opt.dataset.code === currentCode) opt.classList.add('selected');
+  // Initialize
+  elements.label.textContent = getLanguageName(currentCode);
+  renderLanguageOptions(elements.options, isSource);
+  
+  // Mark selected option
+  elements.options.querySelectorAll('.language-option').forEach(opt => {
+    opt.classList.toggle('selected', opt.dataset.code === currentCode);
   });
 
-  selector.addEventListener('click', (e) => {
-    // Don't toggle if clicking on the dropdown itself
-    if (!dropdown.contains(e.target)) {
+  // Selector click handler
+  elements.selector.addEventListener('click', (e) => {
+    if (!elements.dropdown.contains(e.target)) {
       e.stopPropagation();
       
-      // Close other dropdown first
+      // Close other dropdown
       const otherPrefix = prefix === 'source' ? 'target' : 'source';
-      const otherDropdown = root.querySelector(`#${otherPrefix}-language-dropdown`);
-      if (otherDropdown) {
-        otherDropdown.classList.remove('open');
-        const otherSearch = root.querySelector(`#${otherPrefix}-language-search`);
-        const otherOptions = root.querySelector(`#${otherPrefix}-language-options`);
-        if (otherSearch) otherSearch.value = '';
-        if (otherOptions) {
-          otherOptions.querySelectorAll('.language-option').forEach(opt => opt.style.display = '');
-        }
-      }
+      closeDropdown(otherPrefix);
       
-      dropdown.classList.toggle('open');
-      if (dropdown.classList.contains('open')) {
-        // Focus search input when dropdown opens with small delay
-        setTimeout(() => search.focus(), 50);
+      elements.dropdown.classList.toggle('open');
+      if (elements.dropdown.classList.contains('open')) {
+        setTimeout(() => elements.search.focus(), 50);
       }
     }
   });
 
-  // Prevent dropdown from closing when clicking inside it
-  dropdown.addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
+  // Prevent dropdown closing on internal clicks
+  elements.dropdown.addEventListener('click', e => e.stopPropagation());
 
-  search.addEventListener('input', () => {
-    const q = search.value.toLowerCase();
-    options.querySelectorAll('.language-option').forEach(opt => {
-      const t = opt.textContent.toLowerCase();
-      const c = opt.dataset.code.toLowerCase();
-      opt.style.display = t.includes(q) || c.includes(q) ? '' : 'none';
+  // Search filtering
+  elements.search.addEventListener('input', () => {
+    const query = elements.search.value.toLowerCase();
+    elements.options.querySelectorAll('.language-option').forEach(opt => {
+      const text = opt.textContent.toLowerCase();
+      const code = opt.dataset.code.toLowerCase();
+      opt.style.display = text.includes(query) || code.includes(query) ? '' : 'none';
     });
   });
 
-  // Handle Escape key in search
-  search.addEventListener('keydown', (e) => {
+  // Search escape key
+  elements.search.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      dropdown.classList.remove('open');
-      search.value = '';
-      options.querySelectorAll('.language-option').forEach(opt => opt.style.display = '');
+      closeDropdown(prefix);
     }
   });
 
-  options.addEventListener('click', async (e) => {
-    const opt = e.target.closest('.language-option');
-    if (!opt) return;
+  // Option selection
+  elements.options.addEventListener('click', async (e) => {
+    const option = e.target.closest('.language-option');
+    if (!option) return;
     
-    const newCode = opt.dataset.code;
+    const newCode = option.dataset.code;
     if (newCode !== currentCode) {
-      options.querySelectorAll('.language-option.selected').forEach(n => n.classList.remove('selected'));
-      opt.classList.add('selected');
-      label.textContent = getLanguageName(newCode);
+      // Update selection
+      elements.options.querySelectorAll('.language-option.selected')
+        .forEach(opt => opt.classList.remove('selected'));
+      option.classList.add('selected');
+      elements.label.textContent = getLanguageName(newCode);
+      
       await onChange(newCode);
     }
     
-    // Clear search and close dropdown
-    dropdown.classList.remove('open');
-    search.value = '';
-    options.querySelectorAll('.language-option').forEach(o => o.style.display = '');
-  });
-
-  // Global click handler to close dropdown
-  document.addEventListener('click', () => {
-    dropdown.classList.remove('open');
-    search.value = '';
-    options.querySelectorAll('.language-option').forEach(opt => opt.style.display = '');
+    closeDropdown(prefix);
   });
 }
 
-async function updateCacheInfo(el) {
-  const store = await browser.storage.local.get([STORAGE_KEYS.CACHE_DEFINITIONS, STORAGE_KEYS.CACHE_TRANSLATIONS]);
-  let defs = 0, trans = 0;
-  try { const o = JSON.parse(store[STORAGE_KEYS.CACHE_DEFINITIONS] || '{}'); defs = Object.keys(o).length; } catch (e) { console.warn('Cache parse error (definitions):', e); }
-  try { const o = JSON.parse(store[STORAGE_KEYS.CACHE_TRANSLATIONS] || '{}'); trans = Object.keys(o).length; } catch (e) { console.warn('Cache parse error (translations):', e); }
-  el.textContent = `Definitions: ${defs}, Translations: ${trans}`;
+async function updateCacheInfo(element) {
+  const store = await browser.storage.local.get([
+    STORAGE_KEYS.CACHE_DEFINITIONS, 
+    STORAGE_KEYS.CACHE_TRANSLATIONS
+  ]);
+  
+  let defCount = 0, transCount = 0;
+  
+  try {
+    const defs = JSON.parse(store[STORAGE_KEYS.CACHE_DEFINITIONS] || '{}');
+    defCount = Object.keys(defs).length;
+  } catch (e) {
+    console.warn('Cache parse error (definitions):', e);
+  }
+  
+  try {
+    const trans = JSON.parse(store[STORAGE_KEYS.CACHE_TRANSLATIONS] || '{}');
+    transCount = Object.keys(trans).length;
+  } catch (e) {
+    console.warn('Cache parse error (translations):', e);
+  }
+  
+  element.textContent = `Definitions: ${defCount}, Translations: ${transCount}`;
+}
+
+function toggleDarkMode(isDark) {
+  const app = document.getElementById('wg-settings');
+  const methods = isDark ? 'add' : 'remove';
+  
+  app.classList[methods]('dark-mode');
+  document.body.classList[methods]('dark-page');
+}
+
+async function clearAllData(usageElement, cacheElement) {
+  const confirmed = confirm(
+    'Are you sure you want to clear all cached data and reset word counter?\n\n' +
+    'This will delete:\n• All cached definitions and translations\n• Words learned counter\n\n' +
+    'This action cannot be undone.'
+  );
+  
+  if (!confirmed) return;
+  
+  await browser.storage.local.set({
+    [STORAGE_KEYS.CACHE_DEFINITIONS]: '{}',
+    [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}',
+    [STORAGE_KEYS.TOTAL_WORDS_LEARNED]: 0
+  });
+  
+  usageElement.textContent = '0';
+  updateCacheInfo(cacheElement);
 }
 
 async function init() {
-  const app = document.getElementById('wg-settings');
-  const darkToggle = document.getElementById('dark-mode');
-  const cacheInfo = document.getElementById('cache-info');
-  const clearBtn = document.getElementById('clear-cache-btn');
-  const usageNumber = document.getElementById('usage-number');
+  // Get DOM elements
+  const elements = {
+    app: document.getElementById('wg-settings'),
+    darkToggle: document.getElementById('dark-mode'),
+    cacheInfo: document.getElementById('cache-info'),
+    clearBtn: document.getElementById('clear-cache-btn'),
+    usageNumber: document.getElementById('usage-number')
+  };
 
-  const store = await browser.storage.local.get([STORAGE_KEYS.DARK_MODE, STORAGE_KEYS.SOURCE_LANGUAGE, STORAGE_KEYS.TARGET_LANGUAGE, STORAGE_KEYS.TOTAL_WORDS_LEARNED]);
-  const isDark = !!store[STORAGE_KEYS.DARK_MODE];
-  const sLang = store[STORAGE_KEYS.SOURCE_LANGUAGE] || DEFAULT_VALUES.SOURCE_LANGUAGE;
-  const tLang = store[STORAGE_KEYS.TARGET_LANGUAGE] || DEFAULT_VALUES.TARGET_LANGUAGE;
-  const learned = store[STORAGE_KEYS.TOTAL_WORDS_LEARNED] || DEFAULT_VALUES.TOTAL_WORDS_LEARNED;
+  // Load current settings
+  const store = await browser.storage.local.get([
+    STORAGE_KEYS.DARK_MODE,
+    STORAGE_KEYS.SOURCE_LANGUAGE,
+    STORAGE_KEYS.TARGET_LANGUAGE,
+    STORAGE_KEYS.TOTAL_WORDS_LEARNED
+  ]);
 
-  usageNumber.textContent = String(learned);
-  darkToggle.checked = isDark;
-  if (isDark) {
-    app.classList.add('dark-mode');
-    document.body.classList.add('dark-page');
-  } else {
-    app.classList.remove('dark-mode');
-    document.body.classList.remove('dark-page');
-  }
+  const settings = {
+    isDark: !!store[STORAGE_KEYS.DARK_MODE],
+    sourceLang: store[STORAGE_KEYS.SOURCE_LANGUAGE] || DEFAULT_VALUES.SOURCE_LANGUAGE,
+    targetLang: store[STORAGE_KEYS.TARGET_LANGUAGE] || DEFAULT_VALUES.TARGET_LANGUAGE,
+    wordsLearned: store[STORAGE_KEYS.TOTAL_WORDS_LEARNED] || DEFAULT_VALUES.TOTAL_WORDS_LEARNED
+  };
 
-  // Dark mode
-  darkToggle.addEventListener('change', async () => {
-    const v = !!darkToggle.checked;
-    await browser.storage.local.set({[STORAGE_KEYS.DARK_MODE]: v});
-    if (v) {
-      app.classList.add('dark-mode');
-      document.body.classList.add('dark-page');
-    } else {
-      app.classList.remove('dark-mode');
-      document.body.classList.remove('dark-page');
-    }
+  // Initialize UI
+  elements.usageNumber.textContent = String(settings.wordsLearned);
+  elements.darkToggle.checked = settings.isDark;
+  toggleDarkMode(settings.isDark);
+
+  // Setup dark mode toggle
+  elements.darkToggle.addEventListener('change', async () => {
+    const isDark = elements.darkToggle.checked;
+    await browser.storage.local.set({ [STORAGE_KEYS.DARK_MODE]: isDark });
+    toggleDarkMode(isDark);
   });
 
-  // Selectors
-  setupSelector(document, 'source', true, sLang, async (code) => {
-    await browser.storage.local.set({[STORAGE_KEYS.SOURCE_LANGUAGE]: code});
-  });
-  setupSelector(document, 'target', false, tLang, async (code) => {
-    await browser.storage.local.set({[STORAGE_KEYS.TARGET_LANGUAGE]: code});
-    // Clear translation cache on target change
-    await browser.storage.local.set({[STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}'});
-    updateCacheInfo(cacheInfo);
+  // Setup language selectors
+  setupSelector('source', true, settings.sourceLang, async (code) => {
+    await browser.storage.local.set({ [STORAGE_KEYS.SOURCE_LANGUAGE]: code });
   });
 
-  // Cache info + clear
-  await updateCacheInfo(cacheInfo);
-  clearBtn.addEventListener('click', async () => {
-    const confirmed = confirm('Are you sure you want to clear all cached data and reset word counter?\n\nThis will delete:\n• All cached definitions and translations\n• Words learned counter\n\nThis action cannot be undone.');
-    if (!confirmed) return;
-    await browser.storage.local.set({ 
-      [STORAGE_KEYS.CACHE_DEFINITIONS]: '{}', 
-      [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}', 
-      [STORAGE_KEYS.TOTAL_WORDS_LEARNED]: 0 
-    });
-    usageNumber.textContent = '0';
-    updateCacheInfo(cacheInfo);
+  setupSelector('target', false, settings.targetLang, async (code) => {
+    await browser.storage.local.set({ [STORAGE_KEYS.TARGET_LANGUAGE]: code });
+    // Clear translation cache when target language changes
+    await browser.storage.local.set({ [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}' });
+    updateCacheInfo(elements.cacheInfo);
   });
 
-  // In-page settings opener removed; popup is now the primary settings UI
+  // Setup cache management
+  await updateCacheInfo(elements.cacheInfo);
+  elements.clearBtn.addEventListener('click', () => {
+    clearAllData(elements.usageNumber, elements.cacheInfo);
+  });
+
+  // Global click handler to close dropdowns
+  document.addEventListener('click', () => {
+    ['source', 'target'].forEach(closeDropdown);
+  });
 }
 
 init();

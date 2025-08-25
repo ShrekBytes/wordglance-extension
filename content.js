@@ -1,14 +1,7 @@
 (() => {
   'use strict';
 
-  // Constants
-  const STORAGE_KEYS = {
-    TARGET_LANGUAGE: 'wordglance-target-language',
-    SOURCE_LANGUAGE: 'wordglance-source-language',
-    CACHE_DEFINITIONS: 'wordglance-cache-definitions',
-    CACHE_TRANSLATIONS: 'wordglance-cache-translations'
-  };
-
+  // Content-specific configuration
   const CONFIG = {
     tooltipZIndex: 999999,
     maxDefinitions: 9,
@@ -17,19 +10,10 @@
     translationsPerPage: 4,
     maxSynonyms: 6,
     maxAntonyms: 6,
-    cacheSize: 500,
-    apiTimeout: 5000,
     debounceDelay: 100
   };
 
-  const ERROR_MESSAGES = {
-    NO_DEFINITION: 'Definition not found',
-    NETWORK_ERROR: 'Connection error - please try again'
-  };
-
   // State
-  let targetLanguage = 'en';
-  let sourceLanguage = 'auto';
   let currentSelection = '';
   let selectionRect = null;
   let currentDefinitionPage = 0;
@@ -38,22 +22,13 @@
   let translationPages = [];
   let definitionPageHeights = [];
   let translationPageHeights = [];
-
-  const caches = {
-    definitions: new Map(),
-    translations: new Map()
+  let settings = {
+    targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
+    sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
+    darkMode: DEFAULT_VALUES.DARK_MODE
   };
-  let activeRequests = new Set();
 
   // Utilities
-  function lruAdd(map, key, value) {
-    if (map.has(key)) map.delete(key);
-    map.set(key, value);
-    while (map.size > CONFIG.cacheSize) {
-      map.delete(map.keys().next().value);
-    }
-  }
-
   function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -62,16 +37,40 @@
     };
   }
 
-  function sanitizeText(text) {
-    if (!text || typeof text !== 'string') return '';
-    let s = text.trim().replace(/[\x00-\x1F\x7F-\x9F<>'"&]/g, '');
-    if (s.length === 0 || s.length > 100) return '';
-    const words = s.split(/\s+/).filter(Boolean);
-    if (words.length > 5 || /^\d+$/.test(s)) return '';
-    if (!/^[\w\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u200c\u200d\s\-\'\.\,\;\:\!\?]+$/.test(s)) return '';
-    if (!/[a-zA-Z\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(s)) return '';
-    return s;
+
+
+  // Settings management
+  async function loadSettings() {
+    try {
+      const response = await browser.runtime.sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
+      if (response.success) {
+        settings = { ...settings, ...response.data };
+        updateTranslationTitle();
+      }
+    } catch (e) {
+      console.warn('Failed to load settings:', e);
+    }
   }
+
+  // Listen for storage changes from popup
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    
+    if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
+      settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue || DEFAULT_VALUES.TARGET_LANGUAGE;
+      updateTranslationTitle();
+    }
+    
+    if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
+      settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue || DEFAULT_VALUES.SOURCE_LANGUAGE;
+      updateTranslationTitle();
+    }
+    
+    if (changes[STORAGE_KEYS.DARK_MODE]) {
+      settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue || DEFAULT_VALUES.DARK_MODE;
+      updateDarkMode();
+    }
+  });
 
   // Shadow DOM setup
   const host = document.createElement('div');
@@ -301,69 +300,43 @@
 
   buildTooltipStructure();
 
-  // Settings initialization and management
-  async function loadSettings() {
-    try {
-      const settings = await browser.storage.local.get([
-        STORAGE_KEYS.TARGET_LANGUAGE,
-        STORAGE_KEYS.SOURCE_LANGUAGE
-      ]);
-      
-      targetLanguage = settings[STORAGE_KEYS.TARGET_LANGUAGE] || 'en';
-      sourceLanguage = settings[STORAGE_KEYS.SOURCE_LANGUAGE] || 'auto';
-      updateTranslationTitle();
-    } catch (e) {
-      console.warn('Failed to load settings:', e);
+  // Cache frequently used DOM selectors
+  const cachedSelectors = {
+    wordTitle: null,
+    translationTitle: null,
+    defSlider: null,
+    transSlider: null,
+    defContainer: null,
+    transContainer: null
+  };
+
+  function getCachedSelector(key, selector) {
+    if (!cachedSelectors[key]) {
+      cachedSelectors[key] = tooltip.querySelector(selector);
     }
+    return cachedSelectors[key];
   }
 
-  async function loadCaches() {
-    try {
-      const [defCache, transCache] = await Promise.all([
-        browser.storage.local.get(STORAGE_KEYS.CACHE_DEFINITIONS),
-        browser.storage.local.get(STORAGE_KEYS.CACHE_TRANSLATIONS)
-      ]);
-      
-      if (defCache[STORAGE_KEYS.CACHE_DEFINITIONS]) {
-        const defs = JSON.parse(defCache[STORAGE_KEYS.CACHE_DEFINITIONS]);
-        Object.entries(defs).forEach(([k, v]) => lruAdd(caches.definitions, k, v));
-      }
-      
-      if (transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]) {
-        const trans = JSON.parse(transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]);
-        Object.entries(trans).forEach(([k, v]) => lruAdd(caches.translations, k, v));
-      }
-    } catch (e) {
-      console.warn('Cache loading error:', e);
-    }
+  function clearCachedSelectors() {
+    Object.keys(cachedSelectors).forEach(key => {
+      cachedSelectors[key] = null;
+    });
   }
 
-  // Listen for storage changes from popup
-  browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    
-    if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
-      targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue || 'en';
-      updateTranslationTitle();
-    }
-    
-    if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
-      sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue || 'auto';
-      updateTranslationTitle();
-    }
-  });
-
-  // Initialize
-  loadSettings();
-  loadCaches();
+  // Dark mode management
+  function updateDarkMode() {
+    const methods = settings.darkMode ? 'add' : 'remove';
+    tooltip.classList[methods]('dark-mode');
+    triggerIcon.classList[methods]('dark-mode');
+  }
 
   // Selection handling
   function getSelectionInfo() {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return null;
     
-    const text = sanitizeText(sel.toString());
-    if (!text) return null;
+    const text = sel.toString().trim();
+    if (!text || text.length === 0 || text.length > 100) return null;
     
     try {
       const range = sel.getRangeAt(0);
@@ -378,7 +351,9 @@
 
   function positionTriggerIcon(x, y) {
     const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-      ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      ('ontouchstart' in window) || 
+      (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+      window.matchMedia('(pointer: coarse)').matches;
     const buttonSize = isMobile ? 32 : 24;
     const halfButton = buttonSize / 2;
     
@@ -418,7 +393,19 @@
     setTimeout(() => {
       tooltip.style.display = 'none';
       clearTooltipContent();
+      cleanupEventListeners();
     }, 200);
+  }
+
+  function cleanupEventListeners() {
+    // Clean up slider height sync handlers
+    ['definition', 'translation'].forEach(kind => {
+      const slider = tooltip.querySelector(`.${kind}-slider`);
+      if (slider && slider._heightHandler) {
+        slider.removeEventListener('transitionend', slider._heightHandler);
+        slider._heightHandler = null;
+      }
+    });
   }
 
   function clearTooltipContent() {
@@ -430,6 +417,7 @@
     renderSynAnt([], []);
     currentDefinitionPage = currentTranslationPage = 0;
     definitionPageHeights = translationPageHeights = [];
+    clearCachedSelectors();
   }
 
   function onSelectionEvent() {
@@ -473,149 +461,15 @@
         const cy = selectionRect.top;
         positionTriggerIcon(cx, cy);
         showTrigger();
+        
+        // Also reposition tooltip if it's visible
+        repositionTooltip();
       }
     }
   };
 
   window.addEventListener('scroll', updateSelectionRect, { passive: true });
   window.addEventListener('resize', updateSelectionRect);
-
-  // API helpers
-  async function xfetch(url, init = {}) {
-    const ac = new AbortController();
-    const timeout = setTimeout(() => ac.abort(), CONFIG.apiTimeout);
-    
-    try {
-      const res = await fetch(url, { ...init, signal: ac.signal });
-      clearTimeout(timeout);
-      return res;
-    } catch (e) {
-      clearTimeout(timeout);
-      const resp = await browser.runtime.sendMessage({ type: 'WORDGLANCE_FETCH', url, init });
-      if (!resp) throw new Error('No response from background script');
-      
-      return {
-        ok: resp.ok,
-        status: resp.status,
-        statusText: resp.statusText,
-        text: async () => resp.text,
-        json: async () => JSON.parse(resp.text)
-      };
-    }
-  }
-
-  function saveCaches() {
-    try {
-      const defObj = Object.fromEntries(caches.definitions);
-      const transObj = Object.fromEntries(caches.translations);
-      
-      browser.storage.local.set({
-        [STORAGE_KEYS.CACHE_DEFINITIONS]: JSON.stringify(defObj),
-        [STORAGE_KEYS.CACHE_TRANSLATIONS]: JSON.stringify(transObj)
-      });
-    } catch (e) {
-      console.warn('Cache save error:', e);
-    }
-  }
-
-  async function fetchDefinition(word) {
-    const key = word.toLowerCase();
-    if (caches.definitions.has(key)) return caches.definitions.get(key);
-    
-    const requestId = `def-${word}-${Date.now()}`;
-    activeRequests.add(requestId);
-    
-    try {
-      const res = await xfetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`);
-      
-      if (!activeRequests.has(requestId)) return;
-      activeRequests.delete(requestId);
-      
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      
-      const defs = [], syns = new Set(), ants = new Set();
-      (data || []).forEach(entry => {
-        (entry.meanings || []).forEach(m => {
-          (m.synonyms || []).forEach(s => syns.add(s));
-          (m.antonyms || []).forEach(a => ants.add(a));
-          
-          (m.definitions || []).forEach(d => {
-            if (d.definition) {
-              defs.push({
-                definition: d.definition,
-                partOfSpeech: m.partOfSpeech || '',
-                example: d.example || ''
-              });
-            }
-            (d.synonyms || []).forEach(s => syns.add(s));
-            (d.antonyms || []).forEach(a => ants.add(a));
-          });
-        });
-      });
-      
-      const result = {
-        defs: defs.slice(0, CONFIG.maxDefinitions),
-        synonyms: Array.from(syns).slice(0, CONFIG.maxSynonyms),
-        antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms)
-      };
-      
-      lruAdd(caches.definitions, key, result);
-      saveCaches();
-      return result;
-    } catch (e) {
-      activeRequests.delete(requestId);
-      throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
-    }
-  }
-
-  async function fetchTranslation(text) {
-    const key = `${text}::${sourceLanguage}::${targetLanguage}`;
-    if (caches.translations.has(key)) return caches.translations.get(key);
-    
-    const requestId = `trans-${text}-${sourceLanguage}-${targetLanguage}-${Date.now()}`;
-    activeRequests.add(requestId);
-    
-    const params = new URLSearchParams({ dl: targetLanguage, text });
-    if (sourceLanguage !== 'auto') params.set('sl', sourceLanguage);
-    
-    try {
-      const res = await xfetch(`https://ftapi.pythonanywhere.com/translate?${params}`);
-      
-      if (!activeRequests.has(requestId)) return;
-      activeRequests.delete(requestId);
-      
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      
-      const translations = [];
-      if (data?.['destination-text']) {
-        translations.push(data['destination-text']);
-        
-        const allTranslations = data.translations?.['all-translations'] || [];
-        for (const group of allTranslations) {
-          if (Array.isArray(group) && group[0] && group[0] !== data['destination-text'] && !translations.includes(group[0])) {
-            translations.push(group[0]);
-            if (translations.length >= CONFIG.maxTranslations) break;
-          }
-        }
-        
-        if (translations.length < CONFIG.maxTranslations) {
-          const extra = (data.translations?.['possible-translations'] || [])
-            .filter(t => t && !translations.includes(t));
-          translations.push(...extra.slice(0, CONFIG.maxTranslations - translations.length));
-        }
-      }
-      
-      const result = { translations: translations.slice(0, CONFIG.maxTranslations) };
-      lruAdd(caches.translations, key, result);
-      saveCaches();
-      return result;
-    } catch (e) {
-      activeRequests.delete(requestId);
-      throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
-    }
-  }
 
   // Rendering functions
   function paginate(array, perPage) {
@@ -629,8 +483,8 @@
   function updateTranslationTitle() {
     const titleEl = tooltip.querySelector('.translation-title');
     if (titleEl) {
-      const sourceName = sourceLanguage === 'auto' ? 'Auto' : sourceLanguage.toUpperCase();
-      const targetName = targetLanguage.toUpperCase();
+      const sourceName = settings.sourceLanguage === 'auto' ? 'Auto' : settings.sourceLanguage.toUpperCase();
+      const targetName = settings.targetLanguage.toUpperCase();
       titleEl.textContent = `${sourceName} → ${targetName}`;
     }
   }
@@ -652,9 +506,15 @@
       const prev = container.style.transition;
       container.style.transition = 'none';
       container.style.height = targetHeight + 'px';
-      requestAnimationFrame(() => {
-        container.style.transition = prev || 'height 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
-      });
+      if (window.requestAnimationFrame) {
+        requestAnimationFrame(() => {
+          container.style.transition = prev || 'height 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
+        });
+      } else {
+        setTimeout(() => {
+          container.style.transition = prev || 'height 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
+        }, 16);
+      }
     } else {
       container.style.height = targetHeight + 'px';
     }
@@ -798,24 +658,132 @@
   }
 
   function positionTooltipNearRect(rect) {
-    const margin = 20;
+    const margin = 16;
+    const spacing = 12;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    
+    // Get actual tooltip dimensions after content is rendered
     const tRect = tooltip.getBoundingClientRect();
-    let left = rect.left + 10;
-    let top = rect.top - (tRect.height || 120) - 10;
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const tooltipWidth = tRect.width || 320; // fallback for initial positioning
+    const tooltipHeight = tRect.height || 200; // fallback for initial positioning
     
-    if (left + (tRect.width || 320) > vw - margin) left = rect.right - (tRect.width || 320) - 10;
-    if (top < margin) top = rect.bottom + 20;
+    // Define possible positions in order of preference
+    const positions = [
+      // Above (preferred)
+      {
+        name: 'above',
+        left: rect.left + (rect.width / 2) - (tooltipWidth / 2),
+        top: rect.top - tooltipHeight - spacing
+      },
+      // Below
+      {
+        name: 'below',
+        left: rect.left + (rect.width / 2) - (tooltipWidth / 2),
+        top: rect.bottom + spacing
+      },
+      // Right
+      {
+        name: 'right',
+        left: rect.right + spacing,
+        top: rect.top + (rect.height / 2) - (tooltipHeight / 2)
+      },
+      // Left
+      {
+        name: 'left',
+        left: rect.left - tooltipWidth - spacing,
+        top: rect.top + (rect.height / 2) - (tooltipHeight / 2)
+      },
+      // Above-right (if centered above doesn't fit)
+      {
+        name: 'above-right',
+        left: rect.right - tooltipWidth,
+        top: rect.top - tooltipHeight - spacing
+      },
+      // Above-left (if centered above doesn't fit)
+      {
+        name: 'above-left',
+        left: rect.left,
+        top: rect.top - tooltipHeight - spacing
+      },
+      // Below-right (if centered below doesn't fit)
+      {
+        name: 'below-right',
+        left: rect.right - tooltipWidth,
+        top: rect.bottom + spacing
+      },
+      // Below-left (if centered below doesn't fit)
+      {
+        name: 'below-left',
+        left: rect.left,
+        top: rect.bottom + spacing
+      }
+    ];
     
-    left = Math.max(margin, Math.min(left, vw - (tRect.width || 320) - margin));
-    top = Math.max(margin, Math.min(top, vh - 180 - margin));
+    // Function to check if a position fits within viewport
+    function fitsInViewport(pos) {
+      return pos.left >= margin && 
+             pos.top >= margin && 
+             pos.left + tooltipWidth <= vw - margin && 
+             pos.top + tooltipHeight <= vh - margin;
+    }
     
-    Object.assign(tooltip.style, { left: `${left}px`, top: `${top}px` });
+    // Find the first position that fits
+    let bestPosition = null;
+    for (const pos of positions) {
+      if (fitsInViewport(pos)) {
+        bestPosition = pos;
+        break;
+      }
+    }
+    
+    // If no position fits perfectly, use the preferred position and adjust
+    if (!bestPosition) {
+      bestPosition = positions[0]; // Default to above
+      
+      // Adjust horizontally
+      if (bestPosition.left < margin) {
+        bestPosition.left = margin;
+      } else if (bestPosition.left + tooltipWidth > vw - margin) {
+        bestPosition.left = vw - tooltipWidth - margin;
+      }
+      
+      // Adjust vertically
+      if (bestPosition.top < margin) {
+        bestPosition.top = margin;
+      } else if (bestPosition.top + tooltipHeight > vh - margin) {
+        bestPosition.top = vh - tooltipHeight - margin;
+      }
+      
+      // If still doesn't fit vertically, try below the selection
+      if (bestPosition.top < margin) {
+        bestPosition.top = rect.bottom + spacing;
+        if (bestPosition.top + tooltipHeight > vh - margin) {
+          bestPosition.top = vh - tooltipHeight - margin;
+        }
+      }
+    }
+    
+    // Apply the position
+    Object.assign(tooltip.style, {
+      left: `${Math.round(bestPosition.left)}px`,
+      top: `${Math.round(bestPosition.top)}px`
+    });
+    
+    // Store position info for debugging (optional)
+    tooltip.setAttribute('data-position', bestPosition.name || 'adjusted');
   }
 
   function showTooltipUI() {
     tooltip.style.display = 'block';
+    updateDarkMode();
     requestAnimationFrame(() => tooltip.classList.add('show'));
+  }
+
+  function repositionTooltip() {
+    if (selectionRect && tooltip.style.display !== 'none') {
+      positionTooltipNearRect(selectionRect);
+    }
   }
 
   // Slider navigation
@@ -873,13 +841,13 @@
     e.stopPropagation();
     if (!currentSelection) return;
 
-    activeRequests.clear();
-
-    tooltip.querySelector('.word-title').textContent = currentSelection.slice(0, 50);
+    getCachedSelector('wordTitle', '.word-title').textContent = currentSelection.length > 50 
+      ? currentSelection.substring(0, 47) + '...' 
+      : currentSelection;
     updateTranslationTitle();
 
-    const defSlider = tooltip.querySelector('.definition-slider');
-    const transSlider = tooltip.querySelector('.translation-slider');
+    const defSlider = getCachedSelector('defSlider', '.definition-slider');
+    const transSlider = getCachedSelector('transSlider', '.translation-slider');
 
     // Set loading states
     [defSlider, transSlider].forEach(slider => {
@@ -894,38 +862,75 @@
     showTooltipUI();
 
     // Set initial loading heights
-    const defContainer = tooltip.querySelector('.definition-section .content-container');
-    const transContainer = tooltip.querySelector('.translation-section .content-container');
+    const defContainer = getCachedSelector('defContainer', '.definition-section .content-container');
+    const transContainer = getCachedSelector('transContainer', '.translation-section .content-container');
     if (defContainer) smoothHeightTransition(defContainer, 60, true);
     if (transContainer) smoothHeightTransition(transContainer, 80, true);
 
     // Fetch definitions
     try {
-      if (sourceLanguage !== 'en' && sourceLanguage !== 'auto') {
-        defSlider.textContent = '';
-        const infoPage = createElement('div', 'content-page');
-        infoPage.appendChild(createElement('div', 'definition-content info', 
-          'Definitions are only available for English words. Please select English as the source language.'));
-        defSlider.appendChild(infoPage);
-        renderSynAnt([], []);
+      const defResponse = await browser.runtime.sendMessage({ 
+        type: MESSAGE_TYPES.GET_DEFINITION, 
+        word: currentSelection 
+      });
+      
+            if (defResponse.success) {
+        renderDefinitionPages(defResponse.data.defs);
+        renderSynAnt(defResponse.data.synonyms, defResponse.data.antonyms);
       } else {
-        const def = await fetchDefinition(currentSelection);
-        renderDefinitionPages(def.defs);
-        renderSynAnt(def.synonyms, def.antonyms);
+        defSlider.textContent = '';
+        if (defResponse.error === 'Definitions are only available for English words') {
+          const infoPage = createElement('div', 'content-page');
+          infoPage.appendChild(createElement('div', 'definition-content info', 
+            'Definitions are only available for English words. Please select English as the source language.'));
+          defSlider.appendChild(infoPage);
+        } else {
+          defSlider.appendChild(createContentPage(defResponse.error, true));
+        }
+        renderSynAnt([], []);
       }
+      
+      // Reposition tooltip after definition content is loaded
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => repositionTooltip());
+      });
     } catch (err) {
       defSlider.textContent = '';
-      defSlider.appendChild(createContentPage(err.message || err, true));
+      defSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
       renderSynAnt([], []);
     }
 
     // Fetch translations
     try {
-      const trans = await fetchTranslation(currentSelection);
-      renderTranslationPages(trans.translations);
+      const transResponse = await browser.runtime.sendMessage({ 
+        type: MESSAGE_TYPES.GET_TRANSLATION, 
+        text: currentSelection 
+      });
+      
+      if (transResponse.success) {
+        renderTranslationPages(transResponse.data.translations);
+      } else {
+        transSlider.textContent = '';
+        transSlider.appendChild(createContentPage(transResponse.error, true));
+      }
+      
+      // Reposition tooltip after translation content is loaded
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => repositionTooltip());
+      });
     } catch (err) {
       transSlider.textContent = '';
-      transSlider.appendChild(createContentPage(err.message || err, true));
+      transSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => repositionTooltip());
+      });
+    }
+
+    // Update word count
+    try {
+      await browser.runtime.sendMessage({ type: MESSAGE_TYPES.UPDATE_WORD_COUNT });
+    } catch (e) {
+      console.warn('Failed to update word count:', e);
     }
   });
 
@@ -951,6 +956,9 @@
     if (!sel || sel.isCollapsed) hideTrigger();
   }, true);
 
+  // Initialize
+  loadSettings();
+
   console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
-  console.log(`WordGlance v2.3.0 (optimized) initialized with ${Object.keys(LANGUAGES).length} supported languages`);
+  console.log(`WordGlance v2.5.0 (optimized) initialized with ${Object.keys(LANGUAGES).length} supported languages`);
 })();

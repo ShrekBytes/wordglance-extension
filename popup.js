@@ -3,36 +3,7 @@
   Handles language selection, dark mode, cache management, and usage statistics
 */
 
-// Constants
-const LANGUAGES = {
-  'auto': 'Auto-detect', 'en': 'English', 'bn': 'Bengali', 'es': 'Spanish',
-  'fr': 'French', 'de': 'German', 'it': 'Italian', 'pt': 'Portuguese',
-  'ru': 'Russian', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese',
-  'ar': 'Arabic', 'hi': 'Hindi', 'tr': 'Turkish', 'nl': 'Dutch',
-  'sv': 'Swedish', 'da': 'Danish', 'no': 'Norwegian', 'fi': 'Finnish',
-  'pl': 'Polish', 'cs': 'Czech', 'sk': 'Slovak', 'hu': 'Hungarian',
-  'ro': 'Romanian', 'bg': 'Bulgarian', 'hr': 'Croatian', 'sr': 'Serbian',
-  'sl': 'Slovenian', 'et': 'Estonian', 'lv': 'Latvian', 'lt': 'Lithuanian',
-  'uk': 'Ukrainian', 'el': 'Greek', 'he': 'Hebrew', 'th': 'Thai',
-  'vi': 'Vietnamese', 'id': 'Indonesian', 'ms': 'Malay', 'tl': 'Filipino',
-  'sw': 'Swahili', 'am': 'Amharic', 'zu': 'Zulu'
-};
-
-const STORAGE_KEYS = {
-  TARGET_LANGUAGE: 'wordglance-target-language',
-  SOURCE_LANGUAGE: 'wordglance-source-language',
-  DARK_MODE: 'wordglance-dark-mode',
-  TOTAL_WORDS_LEARNED: 'wordglance-total-words-learned',
-  CACHE_DEFINITIONS: 'wordglance-cache-definitions',
-  CACHE_TRANSLATIONS: 'wordglance-cache-translations'
-};
-
-const DEFAULT_VALUES = {
-  TARGET_LANGUAGE: 'en',
-  SOURCE_LANGUAGE: 'auto',
-  DARK_MODE: false,
-  TOTAL_WORDS_LEARNED: 0
-};
+// Popup-specific utilities (shared constants loaded from shared-constants.js)
 
 // Utilities
 const getLanguageName = (code) => LANGUAGES[code] || code.toUpperCase();
@@ -122,43 +93,18 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
     if (!option) return;
     
     const newCode = option.dataset.code;
-    if (newCode !== currentCode) {
-      // Update selection
-      elements.options.querySelectorAll('.language-option.selected')
-        .forEach(opt => opt.classList.remove('selected'));
-      option.classList.add('selected');
-      elements.label.textContent = getLanguageName(newCode);
-      
-      await onChange(newCode);
-    }
+    
+    // Update selection (always update, even if same language is selected)
+    elements.options.querySelectorAll('.language-option.selected')
+      .forEach(opt => opt.classList.remove('selected'));
+    option.classList.add('selected');
+    elements.label.textContent = getLanguageName(newCode);
+    
+    // Always call onChange to ensure the setting is properly saved
+    await onChange(newCode);
     
     closeDropdown(prefix);
   });
-}
-
-async function updateCacheInfo(element) {
-  const store = await browser.storage.local.get([
-    STORAGE_KEYS.CACHE_DEFINITIONS, 
-    STORAGE_KEYS.CACHE_TRANSLATIONS
-  ]);
-  
-  let defCount = 0, transCount = 0;
-  
-  try {
-    const defs = JSON.parse(store[STORAGE_KEYS.CACHE_DEFINITIONS] || '{}');
-    defCount = Object.keys(defs).length;
-  } catch (e) {
-    console.warn('Cache parse error (definitions):', e);
-  }
-  
-  try {
-    const trans = JSON.parse(store[STORAGE_KEYS.CACHE_TRANSLATIONS] || '{}');
-    transCount = Object.keys(trans).length;
-  } catch (e) {
-    console.warn('Cache parse error (translations):', e);
-  }
-  
-  element.textContent = `Definitions: ${defCount}, Translations: ${transCount}`;
 }
 
 function toggleDarkMode(isDark) {
@@ -169,23 +115,22 @@ function toggleDarkMode(isDark) {
   document.body.classList[methods]('dark-page');
 }
 
-async function clearAllData(usageElement, cacheElement) {
+async function clearCache() {
   const confirmed = confirm(
-    'Are you sure you want to clear all cached data and reset word counter?\n\n' +
-    'This will delete:\n• All cached definitions and translations\n• Words learned counter\n\n' +
+    'Are you sure you want to clear all cached data?\n\n' +
+    'This will delete:\n• All cached definitions and translations\n\n' +
+    'Your words learned counter will not be affected.\n' +
     'This action cannot be undone.'
   );
   
   if (!confirmed) return;
   
-  await browser.storage.local.set({
-    [STORAGE_KEYS.CACHE_DEFINITIONS]: '{}',
-    [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}',
-    [STORAGE_KEYS.TOTAL_WORDS_LEARNED]: 0
-  });
-  
-  usageElement.textContent = '0';
-  updateCacheInfo(cacheElement);
+  // Use background script to clear cache
+  try {
+    await browser.runtime.sendMessage({ type: MESSAGE_TYPES.CLEAR_CACHE });
+  } catch (e) {
+    console.warn('Failed to clear cache:', e);
+  }
 }
 
 async function init() {
@@ -193,7 +138,6 @@ async function init() {
   const elements = {
     app: document.getElementById('wg-settings'),
     darkToggle: document.getElementById('dark-mode'),
-    cacheInfo: document.getElementById('cache-info'),
     clearBtn: document.getElementById('clear-cache-btn'),
     usageNumber: document.getElementById('usage-number')
   };
@@ -228,19 +172,30 @@ async function init() {
   // Setup language selectors
   setupSelector('source', true, settings.sourceLang, async (code) => {
     await browser.storage.local.set({ [STORAGE_KEYS.SOURCE_LANGUAGE]: code });
+    // Update local settings to track current language
+    settings.sourceLang = code;
   });
 
   setupSelector('target', false, settings.targetLang, async (code) => {
+    const previousLang = settings.targetLang;
     await browser.storage.local.set({ [STORAGE_KEYS.TARGET_LANGUAGE]: code });
-    // Clear translation cache when target language changes
-    await browser.storage.local.set({ [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}' });
-    updateCacheInfo(elements.cacheInfo);
+    
+    // Only clear translation cache when target language actually changes
+    if (code !== previousLang) {
+      try {
+        await browser.runtime.sendMessage({ type: MESSAGE_TYPES.CLEAR_TRANSLATION_CACHE });
+      } catch (e) {
+        console.warn('Failed to clear translation cache:', e);
+      }
+    }
+    
+    // Update local settings to track current language
+    settings.targetLang = code;
   });
 
   // Setup cache management
-  await updateCacheInfo(elements.cacheInfo);
   elements.clearBtn.addEventListener('click', () => {
-    clearAllData(elements.usageNumber, elements.cacheInfo);
+    clearCache();
   });
 
   // Global click handler to close dropdowns

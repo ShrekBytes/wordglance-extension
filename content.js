@@ -960,5 +960,4 @@
   loadSettings();
 
   console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
-  console.log(`WordGlance v2.5.0 (optimized) initialized with ${Object.keys(LANGUAGES).length} supported languages`);
 })();

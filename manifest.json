@@ -15,6 +15,13 @@
     "https://api.dictionaryapi.dev/*",
     "https://translation-1e79fb3f3adb.herokuapp.com/*"
   ],
+  "browser_specific_settings": {
+    "gecko": {
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
   "background": {
     "scripts": ["shared-constants.js", "shared-utilities.js", "background.js"],
     "persistent": false

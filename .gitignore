@@ -32,3 +32,6 @@ web-ext-artifacts/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Refactoring files
+REFACTORING_SUMMARY.md

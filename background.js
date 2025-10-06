@@ -3,16 +3,6 @@
   Handles API calls, cache management, settings, and message routing
 */
 
-// Background-specific configuration
-const CONFIG = {
-  maxDefinitions: 9,
-  maxTranslations: 8,
-  maxSynonyms: 6,
-  maxAntonyms: 6,
-  cacheSize: 500,
-  apiTimeout: 100000
-};
-
 // State management
 let settings = {
   targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
@@ -21,135 +11,96 @@ let settings = {
 };
 
 const caches = {
-  definitions: new Map(),
-  translations: new Map()
+  definitions: new LRUCache(CONFIG.cacheSize),
+  translations: new LRUCache(CONFIG.cacheSize)
 };
 
-let activeRequests = new Set();
-
-// Utilities
-function lruAdd(map, key, value) {
-  if (map.has(key)) map.delete(key);
-  map.set(key, value);
-  while (map.size > CONFIG.cacheSize) {
-    map.delete(map.keys().next().value);
-  }
-}
-
-function sanitizeText(text) {
-  if (!text || typeof text !== 'string') return '';
-  let s = text.trim().replace(/[\x00-\x1F\x7F-\x9F<>'"&]/g, '');
-  if (s.length === 0 || s.length > 100) return '';
-  const words = s.split(/\s+/).filter(Boolean);
-  if (words.length > 5 || /^\d+$/.test(s)) return '';
-  if (!/^[\w\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u200c\u200d\s\-\'\.\,\;\:\!\?]+$/.test(s)) return '';
-  if (!/[a-zA-Z\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(s)) return '';
-  return s;
-}
-
-// Settings management
+// Settings management with proper boolean handling
 async function loadSettings() {
-  try {
-    const stored = await browser.storage.local.get([
-      STORAGE_KEYS.TARGET_LANGUAGE,
-      STORAGE_KEYS.SOURCE_LANGUAGE,
-      STORAGE_KEYS.DARK_MODE
-    ]);
-    
-    settings.targetLanguage = stored[STORAGE_KEYS.TARGET_LANGUAGE] || DEFAULT_VALUES.TARGET_LANGUAGE;
-    settings.sourceLanguage = stored[STORAGE_KEYS.SOURCE_LANGUAGE] || DEFAULT_VALUES.SOURCE_LANGUAGE;
-    settings.darkMode = stored[STORAGE_KEYS.DARK_MODE] || DEFAULT_VALUES.DARK_MODE;
-  } catch (e) {
-    console.warn('Failed to load settings:', e);
-  }
+  const stored = await StorageUtils.get([
+    STORAGE_KEYS.TARGET_LANGUAGE,
+    STORAGE_KEYS.SOURCE_LANGUAGE,
+    STORAGE_KEYS.DARK_MODE
+  ]);
+  
+  // Fix: Use proper boolean handling instead of || operator
+  settings.targetLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE);
+  settings.sourceLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE);
+  settings.darkMode = StorageUtils.getValue(stored, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE);
 }
 
-// Cache management
+// Cache management with debounced saving
 async function loadCaches() {
   try {
     const [defCache, transCache] = await Promise.all([
-      browser.storage.local.get(STORAGE_KEYS.CACHE_DEFINITIONS),
-      browser.storage.local.get(STORAGE_KEYS.CACHE_TRANSLATIONS)
+      StorageUtils.get(STORAGE_KEYS.CACHE_DEFINITIONS),
+      StorageUtils.get(STORAGE_KEYS.CACHE_TRANSLATIONS)
     ]);
     
     if (defCache[STORAGE_KEYS.CACHE_DEFINITIONS]) {
       const defs = JSON.parse(defCache[STORAGE_KEYS.CACHE_DEFINITIONS]);
-      Object.entries(defs).forEach(([k, v]) => lruAdd(caches.definitions, k, v));
+      caches.definitions.fromObject(defs);
     }
     
     if (transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]) {
       const trans = JSON.parse(transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]);
-      Object.entries(trans).forEach(([k, v]) => lruAdd(caches.translations, k, v));
+      caches.translations.fromObject(trans);
     }
   } catch (e) {
     console.warn('Cache loading error:', e);
   }
 }
 
-function saveCaches() {
+// Debounced cache saving to reduce storage writes
+const saveCaches = debounce(async () => {
   try {
-    const defObj = Object.fromEntries(caches.definitions);
-    const transObj = Object.fromEntries(caches.translations);
-    
-    browser.storage.local.set({
-      [STORAGE_KEYS.CACHE_DEFINITIONS]: JSON.stringify(defObj),
-      [STORAGE_KEYS.CACHE_TRANSLATIONS]: JSON.stringify(transObj)
+    await StorageUtils.set({
+      [STORAGE_KEYS.CACHE_DEFINITIONS]: JSON.stringify(caches.definitions.toObject()),
+      [STORAGE_KEYS.CACHE_TRANSLATIONS]: JSON.stringify(caches.translations.toObject())
     });
   } catch (e) {
     console.warn('Cache save error:', e);
   }
-}
+}, CONFIG.cacheSaveDelay);
 
 async function clearAllCaches() {
   caches.definitions.clear();
   caches.translations.clear();
-  await browser.storage.local.set({
+  await StorageUtils.set({
     [STORAGE_KEYS.CACHE_DEFINITIONS]: '{}',
     [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}'
   });
 }
 
 // API functions
-async function xfetch(url, init = {}) {
-  const ac = new AbortController();
-  const timeout = setTimeout(() => ac.abort(), CONFIG.apiTimeout);
-  
-  try {
-    const res = await fetch(url, { ...init, signal: ac.signal });
-    clearTimeout(timeout);
-    return res;
-  } catch (e) {
-    clearTimeout(timeout);
-    throw e;
-  }
-}
-
 async function fetchDefinition(word) {
-  const key = sanitizeText(word)?.toLowerCase();
+  const key = TextUtils.sanitize(word)?.toLowerCase();
   if (!key) throw new Error('Invalid word');
   
-  if (caches.definitions.has(key)) {
-    return caches.definitions.get(key);
-  }
-  
-  const requestId = `def-${word}-${Date.now()}`;
-  activeRequests.add(requestId);
+  // Check cache first
+  const cached = caches.definitions.get(key);
+  if (cached) return cached;
   
   try {
-    const res = await xfetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`);
-    
-    if (!activeRequests.has(requestId)) return;
-    activeRequests.delete(requestId);
+    const res = await fetchWithTimeout(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`
+    );
     
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     
-    const defs = [], syns = new Set(), ants = new Set();
+    // Extract definitions, synonyms, and antonyms
+    const defs = [];
+    const syns = new Set();
+    const ants = new Set();
+    
     (data || []).forEach(entry => {
       (entry.meanings || []).forEach(m => {
+        // Collect synonyms and antonyms at meaning level
         (m.synonyms || []).forEach(s => syns.add(s));
         (m.antonyms || []).forEach(a => ants.add(a));
         
+        // Collect definitions
         (m.definitions || []).forEach(d => {
           if (d.definition) {
             defs.push({
@@ -158,6 +109,7 @@ async function fetchDefinition(word) {
               example: d.example || ''
             });
           }
+          // Collect synonyms and antonyms at definition level
           (d.synonyms || []).forEach(s => syns.add(s));
           (d.antonyms || []).forEach(a => ants.add(a));
         });
@@ -170,51 +122,60 @@ async function fetchDefinition(word) {
       antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms)
     };
     
-    lruAdd(caches.definitions, key, result);
+    // Cache result and trigger debounced save
+    caches.definitions.set(key, result);
     saveCaches();
     return result;
   } catch (e) {
-    activeRequests.delete(requestId);
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 }
 
 async function fetchTranslation(text) {
-  const cleanText = sanitizeText(text);
+  const cleanText = TextUtils.sanitize(text);
   if (!cleanText) throw new Error('Invalid text');
   
+  // Create cache key with language settings
   const key = `${cleanText}::${settings.sourceLanguage}::${settings.targetLanguage}`;
-  if (caches.translations.has(key)) {
-    return caches.translations.get(key);
+  
+  // Check cache first
+  const cached = caches.translations.get(key);
+  if (cached) return cached;
+  
+  // Build query parameters
+  const params = new URLSearchParams({ 
+    dl: settings.targetLanguage, 
+    text: cleanText 
+  });
+  if (settings.sourceLanguage !== 'auto') {
+    params.set('sl', settings.sourceLanguage);
   }
   
-  const requestId = `trans-${cleanText}-${settings.sourceLanguage}-${settings.targetLanguage}-${Date.now()}`;
-  activeRequests.add(requestId);
-  
-  const params = new URLSearchParams({ dl: settings.targetLanguage, text: cleanText });
-  if (settings.sourceLanguage !== 'auto') params.set('sl', settings.sourceLanguage);
-  
   try {
-    const res = await xfetch(`https://translation-1e79fb3f3adb.herokuapp.com/translate?${params}`);
-    
-    if (!activeRequests.has(requestId)) return;
-    activeRequests.delete(requestId);
+    const res = await fetchWithTimeout(
+      `https://translation-1e79fb3f3adb.herokuapp.com/translate?${params}`
+    );
     
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     
+    // Extract translations
     const translations = [];
     if (data?.['destination-text']) {
       translations.push(data['destination-text']);
       
+      // Add alternative translations
       const allTranslations = data.translations?.['all-translations'] || [];
       for (const group of allTranslations) {
-        if (Array.isArray(group) && group[0] && group[0] !== data['destination-text'] && !translations.includes(group[0])) {
+        if (Array.isArray(group) && group[0] && 
+            group[0] !== data['destination-text'] && 
+            !translations.includes(group[0])) {
           translations.push(group[0]);
           if (translations.length >= CONFIG.maxTranslations) break;
         }
       }
       
+      // Add possible translations if we need more
       if (translations.length < CONFIG.maxTranslations) {
         const extra = (data.translations?.['possible-translations'] || [])
           .filter(t => t && !translations.includes(t));
@@ -222,24 +183,25 @@ async function fetchTranslation(text) {
       }
     }
     
-    const result = { translations: translations.slice(0, CONFIG.maxTranslations) };
-    lruAdd(caches.translations, key, result);
+    const result = { 
+      translations: translations.slice(0, CONFIG.maxTranslations) 
+    };
+    
+    // Cache result and trigger debounced save
+    caches.translations.set(key, result);
     saveCaches();
     return result;
   } catch (e) {
-    activeRequests.delete(requestId);
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 }
 
 async function updateWordCount() {
   try {
-    const stored = await browser.storage.local.get(STORAGE_KEYS.TOTAL_WORDS_LEARNED);
-    const current = stored[STORAGE_KEYS.TOTAL_WORDS_LEARNED] || 0;
-    await browser.storage.local.set({
-      [STORAGE_KEYS.TOTAL_WORDS_LEARNED]: current + 1
-    });
-    return current + 1;
+    const current = await StorageUtils.getSetting(STORAGE_KEYS.TOTAL_WORDS_LEARNED, 0);
+    const newCount = current + 1;
+    await StorageUtils.set({ [STORAGE_KEYS.TOTAL_WORDS_LEARNED]: newCount });
+    return newCount;
   } catch (e) {
     console.warn('Failed to update word count:', e);
     return 0;
@@ -284,7 +246,7 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
         
       case MESSAGE_TYPES.CLEAR_TRANSLATION_CACHE:
         caches.translations.clear();
-        await browser.storage.local.set({
+        await StorageUtils.set({
           [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}'
         });
         return { success: true };
@@ -312,20 +274,21 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
   }
 });
 
-// Storage change listener
+// Storage change listener with proper boolean handling
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   
   if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
-    settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue || DEFAULT_VALUES.TARGET_LANGUAGE;
+    settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue ?? DEFAULT_VALUES.TARGET_LANGUAGE;
   }
   
   if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
-    settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue || DEFAULT_VALUES.SOURCE_LANGUAGE;
+    settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue ?? DEFAULT_VALUES.SOURCE_LANGUAGE;
   }
   
   if (changes[STORAGE_KEYS.DARK_MODE]) {
-    settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue || DEFAULT_VALUES.DARK_MODE;
+    // Fix: Use nullish coalescing to properly handle false values
+    settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
   }
 });
 

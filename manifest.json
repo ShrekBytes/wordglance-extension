@@ -16,7 +16,7 @@
     "https://translation-1e79fb3f3adb.herokuapp.com/*"
   ],
   "background": {
-    "scripts": ["shared-constants.js", "background.js"],
+    "scripts": ["shared-constants.js", "shared-utilities.js", "background.js"],
     "persistent": false
   },
   "browser_action": {
@@ -31,7 +31,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["shared-constants.js", "content.js"],
+      "js": ["shared-constants.js", "shared-utilities.js", "content.js"],
       "run_at": "document_end"
     }
   ],

@@ -10,6 +10,7 @@
   let translationPages = [];
   let definitionPageHeights = [];
   let translationPageHeights = [];
+  let settingsLoaded = false;
   let settings = {
     targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
     sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
@@ -23,6 +24,7 @@
       settings = { ...settings, ...response.data };
       updateTranslationTitle();
     }
+    settingsLoaded = true;
   }
 
   // Function to reset tooltip state when settings change
@@ -372,6 +374,10 @@
   }
 
   function showTrigger() {
+    // Ensure dark mode is applied before showing (in case settings just loaded)
+    if (settingsLoaded) {
+      updateDarkMode();
+    }
     triggerIcon.style.display = 'block';
     requestAnimationFrame(() => triggerIcon.classList.add('show'));
   }
@@ -943,8 +949,10 @@
     if (!sel || sel.isCollapsed) hideTrigger();
   }, true);
 
-  // Initialize
-  loadSettings();
-
-  console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
+  // Initialize - Load settings and apply dark mode immediately
+  (async function init() {
+    await loadSettings();
+    updateDarkMode(); // Apply dark mode immediately after settings load
+    console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
+  })();
 })();

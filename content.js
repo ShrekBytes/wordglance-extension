@@ -1,18 +1,6 @@
 (() => {
   'use strict';
 
-  // Content-specific configuration
-  const CONFIG = {
-    tooltipZIndex: 999999,
-    maxDefinitions: 9,
-    maxTranslations: 8,
-    definitionsPerPage: 3,
-    translationsPerPage: 4,
-    maxSynonyms: 6,
-    maxAntonyms: 6,
-    debounceDelay: 100
-  };
-
   // State
   let currentSelection = '';
   let selectionRect = null;
@@ -22,41 +10,25 @@
   let translationPages = [];
   let definitionPageHeights = [];
   let translationPageHeights = [];
+  let settingsLoaded = false;
   let settings = {
     targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
     sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
     darkMode: DEFAULT_VALUES.DARK_MODE
   };
 
-  // Utilities
-  function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func(...args), wait);
-    };
-  }
-
-
-
   // Settings management
   async function loadSettings() {
-    try {
-      const response = await browser.runtime.sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
-      if (response.success) {
-        settings = { ...settings, ...response.data };
-        updateTranslationTitle();
-      }
-    } catch (e) {
-      console.warn('Failed to load settings:', e);
+    const response = await sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
+    if (response.success) {
+      settings = { ...settings, ...response.data };
+      updateTranslationTitle();
     }
+    settingsLoaded = true;
   }
 
   // Function to reset tooltip state when settings change
   function resetTooltipState() {
-    // Clear any active requests
-    activeRequests.clear();
-    
     // Hide tooltip and trigger if they're visible
     hideTooltip();
     hideTrigger();
@@ -74,26 +46,25 @@
     selectionRect = null;
   }
 
-  // Listen for storage changes from popup
+  // Listen for storage changes from popup with proper boolean handling
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     
     if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
-      settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue || DEFAULT_VALUES.TARGET_LANGUAGE;
+      settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue ?? DEFAULT_VALUES.TARGET_LANGUAGE;
       updateTranslationTitle();
-      // Reset state when target language changes
       resetTooltipState();
     }
     
     if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
-      settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue || DEFAULT_VALUES.SOURCE_LANGUAGE;
+      settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue ?? DEFAULT_VALUES.SOURCE_LANGUAGE;
       updateTranslationTitle();
-      // Reset state when source language changes
       resetTooltipState();
     }
     
     if (changes[STORAGE_KEYS.DARK_MODE]) {
-      settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue || DEFAULT_VALUES.DARK_MODE;
+      // Fix: Use nullish coalescing to properly handle false values
+      settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
       updateDarkMode();
     }
   });
@@ -403,6 +374,10 @@
   }
 
   function showTrigger() {
+    // Ensure dark mode is applied before showing (in case settings just loaded)
+    if (settingsLoaded) {
+      updateDarkMode();
+    }
     triggerIcon.style.display = 'block';
     requestAnimationFrame(() => triggerIcon.classList.add('show'));
   }
@@ -895,12 +870,12 @@
 
     // Fetch definitions
     try {
-      const defResponse = await browser.runtime.sendMessage({ 
+      const defResponse = await sendMessage({ 
         type: MESSAGE_TYPES.GET_DEFINITION, 
         word: currentSelection 
       });
       
-            if (defResponse.success) {
+      if (defResponse.success) {
         renderDefinitionPages(defResponse.data.defs);
         renderSynAnt(defResponse.data.synonyms, defResponse.data.antonyms);
       } else {
@@ -916,10 +891,8 @@
         renderSynAnt([], []);
       }
       
-      // Reposition tooltip after definition content is loaded
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => repositionTooltip());
-      });
+      // Reposition tooltip after content is loaded
+      requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
     } catch (err) {
       defSlider.textContent = '';
       defSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
@@ -928,7 +901,7 @@
 
     // Fetch translations
     try {
-      const transResponse = await browser.runtime.sendMessage({ 
+      const transResponse = await sendMessage({ 
         type: MESSAGE_TYPES.GET_TRANSLATION, 
         text: currentSelection 
       });
@@ -940,24 +913,18 @@
         transSlider.appendChild(createContentPage(transResponse.error, true));
       }
       
-      // Reposition tooltip after translation content is loaded
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => repositionTooltip());
-      });
+      // Reposition tooltip after content is loaded
+      requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
     } catch (err) {
       transSlider.textContent = '';
       transSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => repositionTooltip());
-      });
+      requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
     }
 
     // Update word count
-    try {
-      await browser.runtime.sendMessage({ type: MESSAGE_TYPES.UPDATE_WORD_COUNT });
-    } catch (e) {
-      console.warn('Failed to update word count:', e);
-    }
+    sendMessage({ type: MESSAGE_TYPES.UPDATE_WORD_COUNT }).catch(e => 
+      console.warn('Failed to update word count:', e)
+    );
   });
 
   // Event delegation and cleanup
@@ -982,8 +949,10 @@
     if (!sel || sel.isCollapsed) hideTrigger();
   }, true);
 
-  // Initialize
-  loadSettings();
-
-  console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
+  // Initialize - Load settings and apply dark mode immediately
+  (async function init() {
+    await loadSettings();
+    updateDarkMode(); // Apply dark mode immediately after settings load
+    console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
+  })();
 })();

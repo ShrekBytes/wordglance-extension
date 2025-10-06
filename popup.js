@@ -126,11 +126,7 @@ async function clearCache() {
   if (!confirmed) return;
   
   // Use background script to clear cache
-  try {
-    await browser.runtime.sendMessage({ type: MESSAGE_TYPES.CLEAR_CACHE });
-  } catch (e) {
-    console.warn('Failed to clear cache:', e);
-  }
+  await sendMessage({ type: MESSAGE_TYPES.CLEAR_CACHE });
 }
 
 async function init() {
@@ -142,8 +138,8 @@ async function init() {
     usageNumber: document.getElementById('usage-number')
   };
 
-  // Load current settings
-  const store = await browser.storage.local.get([
+  // Load current settings with proper boolean handling
+  const store = await StorageUtils.get([
     STORAGE_KEYS.DARK_MODE,
     STORAGE_KEYS.SOURCE_LANGUAGE,
     STORAGE_KEYS.TARGET_LANGUAGE,
@@ -151,10 +147,11 @@ async function init() {
   ]);
 
   const settings = {
-    isDark: !!store[STORAGE_KEYS.DARK_MODE],
-    sourceLang: store[STORAGE_KEYS.SOURCE_LANGUAGE] || DEFAULT_VALUES.SOURCE_LANGUAGE,
-    targetLang: store[STORAGE_KEYS.TARGET_LANGUAGE] || DEFAULT_VALUES.TARGET_LANGUAGE,
-    wordsLearned: store[STORAGE_KEYS.TOTAL_WORDS_LEARNED] || DEFAULT_VALUES.TOTAL_WORDS_LEARNED
+    // Fix: Use StorageUtils.getValue for proper boolean handling
+    isDark: StorageUtils.getValue(store, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE),
+    sourceLang: StorageUtils.getValue(store, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE),
+    targetLang: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE),
+    wordsLearned: StorageUtils.getValue(store, STORAGE_KEYS.TOTAL_WORDS_LEARNED, DEFAULT_VALUES.TOTAL_WORDS_LEARNED)
   };
 
   // Initialize UI
@@ -165,38 +162,30 @@ async function init() {
   // Setup dark mode toggle
   elements.darkToggle.addEventListener('change', async () => {
     const isDark = elements.darkToggle.checked;
-    await browser.storage.local.set({ [STORAGE_KEYS.DARK_MODE]: isDark });
+    await StorageUtils.set({ [STORAGE_KEYS.DARK_MODE]: isDark });
     toggleDarkMode(isDark);
   });
 
   // Setup language selectors
   setupSelector('source', true, settings.sourceLang, async (code) => {
-    await browser.storage.local.set({ [STORAGE_KEYS.SOURCE_LANGUAGE]: code });
-    // Update local settings to track current language
+    await StorageUtils.set({ [STORAGE_KEYS.SOURCE_LANGUAGE]: code });
     settings.sourceLang = code;
   });
 
   setupSelector('target', false, settings.targetLang, async (code) => {
     const previousLang = settings.targetLang;
-    await browser.storage.local.set({ [STORAGE_KEYS.TARGET_LANGUAGE]: code });
+    await StorageUtils.set({ [STORAGE_KEYS.TARGET_LANGUAGE]: code });
     
     // Only clear translation cache when target language actually changes
     if (code !== previousLang) {
-      try {
-        await browser.runtime.sendMessage({ type: MESSAGE_TYPES.CLEAR_TRANSLATION_CACHE });
-      } catch (e) {
-        console.warn('Failed to clear translation cache:', e);
-      }
+      await sendMessage({ type: MESSAGE_TYPES.CLEAR_TRANSLATION_CACHE });
     }
     
-    // Update local settings to track current language
     settings.targetLang = code;
   });
 
   // Setup cache management
-  elements.clearBtn.addEventListener('click', () => {
-    clearCache();
-  });
+  elements.clearBtn.addEventListener('click', clearCache);
 
   // Global click handler to close dropdowns
   document.addEventListener('click', () => {

@@ -292,6 +292,12 @@ browser.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// Clear caches on browser startup to ensure fresh data
+browser.runtime.onStartup.addListener(async () => {
+  console.log('WordGlance: Clearing caches on browser startup');
+  await clearAllCaches();
+});
+
 // Initialize
 loadSettings();
 loadCaches();

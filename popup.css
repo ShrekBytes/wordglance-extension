@@ -1,5 +1,11 @@
 html, body { margin:0; padding:0; }
-body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#ffffff; }
+body {
+	font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+	background:#ffffff;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+}
+body.popup-ready { opacity: 1; }
 body.dark-page { background:#1a1a1a; }
 #app, .wordglance-root { background: transparent; }
 #app { width: 400px; padding: 0; }

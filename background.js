@@ -29,6 +29,10 @@ async function loadSettings() {
   settings.darkMode = StorageUtils.getValue(stored, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE);
 }
 
+const settingsReady = loadSettings().catch(e => {
+  console.warn('Settings load error:', e);
+});
+
 // Cache management with debounced saving
 async function loadCaches() {
   try {
@@ -211,6 +215,8 @@ async function updateWordCount() {
 // Message handling
 browser.runtime.onMessage.addListener(async (msg, sender) => {
   try {
+    await settingsReady;
+
     switch (msg.type) {
       case MESSAGE_TYPES.GET_SETTINGS:
         return {
@@ -299,5 +305,4 @@ browser.runtime.onStartup.addListener(async () => {
 });
 
 // Initialize
-loadSettings();
 loadCaches();

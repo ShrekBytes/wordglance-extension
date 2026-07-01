@@ -516,6 +516,14 @@
     return height;
   }
 
+  function getPageHeight(slider, index, kind) {
+    const page = slider?.children?.[index];
+    if (!page) return 0;
+
+    const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
+    return heights[index] || measurePageHeight(page, slider.clientWidth);
+  }
+
   function smoothHeightTransition(container, targetHeight, immediate = false) {
     if (!container) return;
     if (immediate) {

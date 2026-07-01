@@ -25,7 +25,7 @@ Get instant dictionary definitions and translations for any text on any website!
 - [Contributing](#contributing)
 - [License](#license)
 
-## What it does
+## ✨ What it does
 
 - **Dictionary**: Get definitions, examples, synonyms and antonyms
 - **Translation**: Translate to 40+ languages instantly
@@ -34,7 +34,7 @@ Get instant dictionary definitions and translations for any text on any website!
 - **Mobile-friendly**: Optimized for both desktop and mobile devices
 - **Customizable**: Choose your languages and preferences
 
-## How to install
+## 🚀 How to install
 
 ### Firefox Extension Installation
 
@@ -97,7 +97,7 @@ Click the extension icon to access settings:
 
 **All 40+ languages (A-Z):** Amharic, Arabic, Bengali, Bulgarian, Chinese, Croatian, Czech, Danish, Dutch, English, Estonian, Filipino, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Latvian, Lithuanian, Malay, Norwegian, Polish, Portuguese, Romanian, Russian, Serbian, Slovak, Slovenian, Spanish, Swahili, Swedish, Thai, Turkish, Ukrainian, Vietnamese, Zulu
 
-## Common questions
+## ❓ Common questions
 
 **Q: Is it free?**  
 A: Yes! Completely free and no ads.

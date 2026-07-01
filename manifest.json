@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "WordGlance - Dictionary & Translation",
-  "version": "3.1.1",
+  "version": "3.0.0",
   "description": "Get instant dictionary definitions and translations for any text on any website!",
   "icons": {
     "16": "assets/icon_16.png",

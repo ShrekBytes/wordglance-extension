@@ -11,6 +11,7 @@
   let definitionPageHeights = [];
   let translationPageHeights = [];
   let settingsLoaded = false;
+  let settingsReadyPromise = null;
   let settings = {
     targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
     sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
@@ -25,6 +26,17 @@
       updateTranslationTitle();
     }
     settingsLoaded = true;
+  }
+
+  // Ensure settings are loaded once before first UI render
+  function ensureSettingsReady() {
+    if (!settingsReadyPromise) {
+      settingsReadyPromise = (async () => {
+        await loadSettings();
+        updateDarkMode();
+      })();
+    }
+    return settingsReadyPromise;
   }
 
   // Function to reset tooltip state when settings change
@@ -491,13 +503,23 @@
   }
 
   function measurePageHeight(page) {
-    const prevStyle = page.getAttribute('style') || '';
+    const prev = {
+      position: page.style.position,
+      visibility: page.style.visibility,
+      left: page.style.left,
+      top: page.style.top,
+      height: page.style.height
+    };
+
     Object.assign(page.style, {
-      position: 'absolute', visibility: 'hidden', left: '-10000px',
-      top: '0', height: 'auto'
+      position: 'absolute',
+      visibility: 'hidden',
+      left: '-10000px',
+      top: '0',
+      height: 'auto'
     });
     const height = page.scrollHeight;
-    page.setAttribute('style', prevStyle);
+    Object.assign(page.style, prev);
     return height;
   }
 
@@ -529,9 +551,12 @@
     
     if (kind) {
       const container = slider.closest('.content-container');
+      const activePage = slider.children[index];
+      const liveHeight = activePage ? activePage.scrollHeight : 0;
       const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
-      const target = heights[index] || (slider.children[index]?.scrollHeight || 0);
-      if (container && target) smoothHeightTransition(container, target);
+      const fallbackHeight = heights[index] || 0;
+      const target = liveHeight || fallbackHeight;
+      if (container && target > 0) smoothHeightTransition(container, target);
     }
   }
 
@@ -647,15 +672,32 @@
       if (e.propertyName === 'transform') {
         const container = slider.closest('.content-container');
         const index = kind === 'definition' ? currentDefinitionPage : currentTranslationPage;
+        const activePage = slider.children[index];
+        const liveHeight = activePage ? activePage.scrollHeight : 0;
         const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
-        const target = heights[index] || (slider.children[index]?.scrollHeight || 0);
-        if (container && target) smoothHeightTransition(container, target);
+        const target = liveHeight || heights[index] || 0;
+        if (container && target > 0) smoothHeightTransition(container, target);
       }
     };
     
     if (slider._heightHandler) slider.removeEventListener('transitionend', slider._heightHandler);
     slider.addEventListener('transitionend', handler);
     slider._heightHandler = handler;
+  }
+
+  // Re-sync current page heights after async updates/layout settle
+  function syncCurrentPageHeights() {
+    const defSlider = tooltip.querySelector('.definition-slider');
+    const transSlider = tooltip.querySelector('.translation-slider');
+    const defContainer = tooltip.querySelector('.definition-section .content-container');
+    const transContainer = tooltip.querySelector('.translation-section .content-container');
+
+    if (defSlider?.children[currentDefinitionPage] && defContainer) {
+      smoothHeightTransition(defContainer, defSlider.children[currentDefinitionPage].scrollHeight, true);
+    }
+    if (transSlider?.children[currentTranslationPage] && transContainer) {
+      smoothHeightTransition(transContainer, transSlider.children[currentTranslationPage].scrollHeight, true);
+    }
   }
 
   function positionTooltipNearRect(rect) {
@@ -695,25 +737,25 @@
         left: rect.left - tooltipWidth - spacing,
         top: rect.top + (rect.height / 2) - (tooltipHeight / 2)
       },
-      // Above-right (if centered above doesn't fit)
+      // Above-right
       {
         name: 'above-right',
         left: rect.right - tooltipWidth,
         top: rect.top - tooltipHeight - spacing
       },
-      // Above-left (if centered above doesn't fit)
+      // Above-left
       {
         name: 'above-left',
         left: rect.left,
         top: rect.top - tooltipHeight - spacing
       },
-      // Below-right (if centered below doesn't fit)
+      // Below-right
       {
         name: 'below-right',
         left: rect.right - tooltipWidth,
         top: rect.bottom + spacing
       },
-      // Below-left (if centered below doesn't fit)
+      // Below-left
       {
         name: 'below-left',
         left: rect.left,
@@ -721,7 +763,6 @@
       }
     ];
     
-    // Function to check if a position fits within viewport
     function fitsInViewport(pos) {
       return pos.left >= margin && 
              pos.top >= margin && 
@@ -729,7 +770,6 @@
              pos.top + tooltipHeight <= vh - margin;
     }
     
-    // Find the first position that fits
     let bestPosition = null;
     for (const pos of positions) {
       if (fitsInViewport(pos)) {
@@ -738,25 +778,18 @@
       }
     }
     
-    // If no position fits perfectly, use the preferred position and adjust
     if (!bestPosition) {
-      bestPosition = positions[0]; // Default to above
-      
-      // Adjust horizontally
+      bestPosition = positions[0];
       if (bestPosition.left < margin) {
         bestPosition.left = margin;
       } else if (bestPosition.left + tooltipWidth > vw - margin) {
         bestPosition.left = vw - tooltipWidth - margin;
       }
-      
-      // Adjust vertically
       if (bestPosition.top < margin) {
         bestPosition.top = margin;
       } else if (bestPosition.top + tooltipHeight > vh - margin) {
         bestPosition.top = vh - tooltipHeight - margin;
       }
-      
-      // If still doesn't fit vertically, try below the selection
       if (bestPosition.top < margin) {
         bestPosition.top = rect.bottom + spacing;
         if (bestPosition.top + tooltipHeight > vh - margin) {
@@ -765,13 +798,11 @@
       }
     }
     
-    // Apply the position
     Object.assign(tooltip.style, {
       left: `${Math.round(bestPosition.left)}px`,
       top: `${Math.round(bestPosition.top)}px`
     });
     
-    // Store position info for debugging (optional)
     tooltip.setAttribute('data-position', bestPosition.name || 'adjusted');
   }
 
@@ -842,6 +873,8 @@
     e.stopPropagation();
     if (!currentSelection) return;
 
+    await ensureSettingsReady();
+
     getCachedSelector('wordTitle', '.word-title').textContent = currentSelection.length > 50 
       ? currentSelection.substring(0, 47) + '...' 
       : currentSelection;
@@ -891,8 +924,10 @@
         renderSynAnt([], []);
       }
       
-      // Reposition tooltip after content is loaded
-      requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        syncCurrentPageHeights();
+        repositionTooltip();
+      }));
     } catch (err) {
       defSlider.textContent = '';
       defSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
@@ -913,12 +948,17 @@
         transSlider.appendChild(createContentPage(transResponse.error, true));
       }
       
-      // Reposition tooltip after content is loaded
-      requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        syncCurrentPageHeights();
+        repositionTooltip();
+      }));
     } catch (err) {
       transSlider.textContent = '';
       transSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
-      requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        syncCurrentPageHeights();
+        repositionTooltip();
+      }));
     }
 
     // Update word count
@@ -951,8 +991,7 @@
 
   // Initialize - Load settings and apply dark mode immediately
   (async function init() {
-    await loadSettings();
-    updateDarkMode(); // Apply dark mode immediately after settings load
+    await ensureSettingsReady();
     console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
   })();
 })();

@@ -1,0 +1,181 @@
+name: Build and Release XPI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - manifest.json
+      - dist/**
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.version_check.outputs.version_changed }}
+      version: ${{ steps.version_check.outputs.version }}
+      prev_version: ${{ steps.version_check.outputs.prev_version }}
+      tag: ${{ steps.version_check.outputs.tag }}
+      changelog_range: ${{ steps.version_check.outputs.changelog_range }}
+      xpi_path: ${{ steps.version_check.outputs.xpi_path }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect manifest version change
+        id: version_check
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          BEFORE_SHA="${{ github.event.before }}"
+          ZERO_SHA="0000000000000000000000000000000000000000"
+
+          if [[ "${{ github.event_name }}" != "push" ]]; then
+            VERSION_CHANGED=false
+            PREV_VERSION=""
+          elif [[ "$BEFORE_SHA" == "$ZERO_SHA" || -z "$BEFORE_SHA" ]]; then
+            VERSION_CHANGED=true
+            PREV_VERSION=""
+          else
+            PREV_VERSION=$(git show "$BEFORE_SHA:manifest.json" 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).version||'')}catch(e){console.log('')}})")
+            if [[ "$PREV_VERSION" != "$VERSION" ]]; then
+              VERSION_CHANGED=true
+            else
+              VERSION_CHANGED=false
+            fi
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "prev_version=$PREV_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ -n "$PREV_VERSION" ]]; then
+            echo "changelog_range=v$PREV_VERSION...v$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "changelog_range=Initial release...v$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+          echo "xpi_path=dist/wordglance-extension-$VERSION.xpi" >> "$GITHUB_OUTPUT"
+          echo "version_changed=$VERSION_CHANGED" >> "$GITHUB_OUTPUT"
+
+          echo "Current version: $VERSION"
+          echo "Previous version: ${PREV_VERSION:-<none>}"
+          echo "Version changed: $VERSION_CHANGED"
+
+      - name: Build XPI
+        if: steps.version_check.outputs.version_changed == 'true'
+        shell: bash
+        run: |
+          mkdir -p dist
+          zip -r "${{ steps.version_check.outputs.xpi_path }}" \
+            manifest.json \
+            background.js \
+            content.js \
+            popup.html \
+            popup.css \
+            popup.js \
+            shared-constants.js \
+            shared-utilities.js \
+            assets
+
+      - name: Commit unsigned XPI to dist
+        if: steps.version_check.outputs.version_changed == 'true'
+        shell: bash
+        run: |
+          if [[ -z "$(git status --porcelain dist)" ]]; then
+            echo "No dist changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist
+          git commit -m "build: add unsigned xpi for ${{ steps.version_check.outputs.version }}"
+          git push
+
+      - name: Create or update release (published)
+        if: steps.version_check.outputs.version_changed == 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version_check.outputs.tag }}
+          name: release ${{ steps.version_check.outputs.version }}
+          allowUpdates: true
+          draft: false
+          body: |
+            Changelog
+
+            - update notes here
+
+            Full Changelog: ${{ steps.version_check.outputs.changelog_range }}
+
+  upload-signed-to-latest-release:
+    runs-on: ubuntu-latest
+    needs: build-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Find changed signed XPI files in dist
+        id: signed_files
+        shell: bash
+        run: |
+          BEFORE_SHA="${{ github.event.before }}"
+          AFTER_SHA="${{ github.sha }}"
+          ZERO_SHA="0000000000000000000000000000000000000000"
+
+          if [[ "${{ github.event_name }}" != "push" ]]; then
+            CHANGED=""
+          elif [[ "$BEFORE_SHA" == "$ZERO_SHA" || -z "$BEFORE_SHA" ]]; then
+            CHANGED=$(git ls-files "dist/*.xpi")
+          else
+            CHANGED=$(git diff --name-status "$BEFORE_SHA" "$AFTER_SHA" -- "dist/*.xpi" | awk '$1 ~ /^(A|M|R|C)/ {print $NF}')
+          fi
+
+          SIGNED=$(echo "$CHANGED" | grep -Ei 'dist/.*firefox.*\.xpi$' || true)
+
+          {
+            echo "files<<EOF"
+            echo "$SIGNED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if [[ -n "$SIGNED" ]]; then
+            echo "has_signed=true" >> "$GITHUB_OUTPUT"
+            echo "Signed files detected:"
+            echo "$SIGNED"
+          else
+            echo "has_signed=false" >> "$GITHUB_OUTPUT"
+            echo "No signed files detected in dist/."
+          fi
+
+      - name: Upload signed XPI files to matching release tags
+        if: steps.signed_files.outputs.has_signed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+
+            base=$(basename "$file")
+            version=$(echo "$base" | sed -E 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+            tag="v$version"
+
+            if [[ -z "$version" || "$tag" == "v$base" ]]; then
+              echo "Could not parse version from $file. Skipping."
+              continue
+            fi
+
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" "$file" --clobber
+              echo "Uploaded $file to release $tag"
+            else
+              echo "Release $tag not found for $file. Skipping."
+            fi
+          done <<< "${{ steps.signed_files.outputs.files }}"

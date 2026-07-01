@@ -2,7 +2,7 @@
 
 Get instant dictionary definitions and translations for any text on any website! Just select text and click the book icon.
 
-> **🚨 For Chrome, Edge, Safari, and other browsers**:  
+> **For Chrome, Edge, Safari, and other browsers**:  
 > Use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) — it works the same as the extension.
 >
 > **Why no extension for Chromium-based browsers?**  
@@ -13,28 +13,28 @@ Get instant dictionary definitions and translations for any text on any website!
 
 ![WordGlance Screenshot](/screenshots/dark.png)
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [✨ What it does](#-what-it-does)
-- [🚀 How to install](#-how-to-install)
-- [📱 How to use](#-how-to-use)
-- [⚙️ Settings](#️-settings)
-- [🌍 Supported languages](#-supported-languages)
-- [❓ Common questions](#-common-questions)
-- [👨‍💻 For developers](#-for-developers)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
+- [What it does](#what-it-does)
+- [How to install](#how-to-install)
+- [How to use](#how-to-use)
+- [Settings](#settings)
+- [Supported languages](#supported-languages)
+- [Common questions](#common-questions)
+- [For developers](#for-developers)
+- [Contributing](#contributing)
+- [License](#license)
 
-## ✨ What it does
+## What it does
 
-- **📚 Dictionary**: Get definitions, examples, synonyms and antonyms
-- **🌍 Translation**: Translate to 40+ languages instantly
-- **⚡ Fast**: Smart caching for instant results
-- **🎨 Beautiful**: Clean interface with dark mode
-- **📱 Mobile-friendly**: Optimized for both desktop and mobile devices
-- **🔧 Customizable**: Choose your languages and preferences
+- **Dictionary**: Get definitions, examples, synonyms and antonyms
+- **Translation**: Translate to 40+ languages instantly
+- **Fast**: Smart caching for instant results
+- **Beautiful**: Clean interface with dark mode
+- **Mobile-friendly**: Optimized for both desktop and mobile devices
+- **Customizable**: Choose your languages and preferences
 
-## 🚀 How to install
+## How to install
 
 ### Firefox Extension Installation
 
@@ -52,7 +52,7 @@ Get instant dictionary definitions and translations for any text on any website!
 
 If you prefer a userscript or use other browsers, check out the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) which works on Chrome, Edge, Safari, and other browsers.
 
-## 📱 How to use
+## How to use
 
 ### Desktop & Mobile
 
@@ -65,7 +65,7 @@ If you prefer a userscript or use other browsers, check out the [WordGlance User
 <img src="/screenshots/light.png" width="666" alt="WordGlance Light Mode">
 <img src="/screenshots/dark.png" width="666" alt="WordGlance Dark Mode">
 
-### 💡 Tips
+### Tips
 
 - **Desktop**: Works with mouse selection, keyboard shortcuts, and double-click
 - **Mobile**: Double-tap to select words, or long-press and drag for phrases
@@ -73,13 +73,13 @@ If you prefer a userscript or use other browsers, check out the [WordGlance User
 - Great at **short phrases** for translations
 - Supports **40+ languages** including Spanish, French, German, Chinese, Japanese, Arabic, and more
 
-## ⚙️ Settings
+## Settings
 
 Click the extension icon to access settings:
 
-- **🌙 Dark Mode** - Easy on the eyes for night browsing
-- **🌍 Languages** - Choose source and target languages (defaults to Auto → English)
-- **🗂️ Cache** - Clear stored data if needed
+- **Dark Mode** - Easy on the eyes for night browsing
+- **Languages** - Choose source and target languages (defaults to Auto → English)
+- **Cache** - Clear stored data if needed
 
 <img src="/screenshots/settings_dark.png" width="666" alt="Settings Dark Mode">
 <img src="/screenshots/settings_light.png" width="666" alt="Settings Light Mode">
@@ -97,7 +97,7 @@ Click the extension icon to access settings:
 
 **All 40+ languages (A-Z):** Amharic, Arabic, Bengali, Bulgarian, Chinese, Croatian, Czech, Danish, Dutch, English, Estonian, Filipino, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Latvian, Lithuanian, Malay, Norwegian, Polish, Portuguese, Romanian, Russian, Serbian, Slovak, Slovenian, Spanish, Swahili, Swedish, Thai, Turkish, Ukrainian, Vietnamese, Zulu
 
-## ❓ Common questions
+## Common questions
 
 **Q: Is it free?**  
 A: Yes! Completely free and no ads.
@@ -143,7 +143,7 @@ A: This extension is designed for Firefox. For Chrome, Edge, Safari, and other b
 
 **Have a question, suggestion, or found a bug?** [Open an issue](https://github.com/ShrekBytes/wordglance-extension/issues) on GitHub and we'll help you out!
 
-## 👨‍💻 For developers
+## For developers
 
 ### Extension Structure
 
@@ -171,12 +171,12 @@ The extension uses browser storage for user preferences:
 
 _Special thanks to these amazing free APIs that make WordGlance possible!_
 
-## 🤝 Contributing
+## Contributing
 
 Found a bug? Want a feature? [Open an issue](https://github.com/ShrekBytes/wordglance-extension/issues) or submit a pull request!
 
 _Love WordGlance? Give it a ⭐ star on GitHub!_
 
-## 📄 License
+## License
 
 Open source under [GPL-3.0 License](LICENSE)

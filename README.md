@@ -34,7 +34,7 @@ Get instant dictionary definitions and translations for any text on any website!
 - **Mobile-friendly**: Optimized for both desktop and mobile devices
 - **Customizable**: Choose your languages and preferences
 
-## 🚀 How to install
+## How to install
 
 ### Firefox Extension Installation
 
@@ -91,7 +91,7 @@ Click the extension icon to access settings:
 - Auto-detect → Chinese (`auto` → `zh`)
 - Any language → English (`auto` → `en`)
 
-## 🌍 Supported languages
+## Supported languages
 
 **Major languages:** Arabic, Bengali, Chinese, English, French, German, Hindi, Italian, Japanese, Korean, Portuguese, Russian, Spanish
 

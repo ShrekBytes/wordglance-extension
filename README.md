@@ -81,7 +81,7 @@ Click the extension icon to access settings:
 - **Languages** - Choose source and target languages (defaults to Auto → English)
 - **Cache** - Clear stored data if needed
 
-![Settings View](/settings.png)
+![Settings View](screenshots/settings.png)
 
 
 ### Popular language combinations:

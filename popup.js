@@ -191,6 +191,8 @@ async function init() {
   document.addEventListener('click', () => {
     ['source', 'target'].forEach(closeDropdown);
   });
+
+  document.body.classList.add('popup-ready');
 }
 
 init();

@@ -490,15 +490,26 @@
     }
   }
 
-  function measurePageHeight(page) {
+  function measurePageHeight(page, width) {
     const prevStyle = page.getAttribute('style') || '';
+    const measurementWidth = width || page.parentElement?.clientWidth || page.clientWidth || page.scrollWidth || 0;
     Object.assign(page.style, {
-      position: 'absolute', visibility: 'hidden', left: '-10000px',
-      top: '0', height: 'auto'
+      position: 'absolute', visibility: 'hidden', left: '0',
+      top: '0', width: measurementWidth ? `${measurementWidth}px` : '100%',
+      maxWidth: measurementWidth ? `${measurementWidth}px` : '100%',
+      height: 'auto', pointerEvents: 'none'
     });
     const height = page.scrollHeight;
     page.setAttribute('style', prevStyle);
     return height;
+  }
+
+  function getPageHeight(slider, index, kind) {
+    const page = slider?.children?.[index];
+    if (!page) return 0;
+
+    const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
+    return heights[index] || measurePageHeight(page, slider.clientWidth);
   }
 
   function smoothHeightTransition(container, targetHeight, immediate = false) {
@@ -530,7 +541,7 @@
     if (kind) {
       const container = slider.closest('.content-container');
       const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
-      const target = heights[index] || (slider.children[index]?.scrollHeight || 0);
+      const target = getPageHeight(slider, index, kind);
       if (container && target) smoothHeightTransition(container, target);
     }
   }
@@ -579,7 +590,7 @@
       slider.appendChild(pageDiv);
     });
     
-    definitionPageHeights = Array.from(slider.children).map(measurePageHeight);
+    definitionPageHeights = Array.from(slider.children).map(page => measurePageHeight(page, slider.clientWidth));
     updateSlider(slider, info, prev, next, currentDefinitionPage, definitionPages.length, 'definition');
     attachSliderHeightSync('definition');
   }
@@ -607,7 +618,7 @@
       slider.appendChild(pageDiv);
     });
     
-    translationPageHeights = Array.from(slider.children).map(measurePageHeight);
+    translationPageHeights = Array.from(slider.children).map(page => measurePageHeight(page, slider.clientWidth));
     updateSlider(slider, info, prev, next, currentTranslationPage, translationPages.length, 'translation');
     attachSliderHeightSync('translation');
   }
@@ -647,8 +658,7 @@
       if (e.propertyName === 'transform') {
         const container = slider.closest('.content-container');
         const index = kind === 'definition' ? currentDefinitionPage : currentTranslationPage;
-        const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
-        const target = heights[index] || (slider.children[index]?.scrollHeight || 0);
+        const target = getPageHeight(slider, index, kind);
         if (container && target) smoothHeightTransition(container, target);
       }
     };

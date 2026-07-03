@@ -95,12 +95,21 @@ async function fetchDefinition(word) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     
-    // Extract definitions, synonyms, and antonyms
+    // Extract definitions, synonyms, antonyms, and pronunciation audio
     const defs = [];
     const syns = new Set();
     const ants = new Set();
+    let audio = '';
     
     (data || []).forEach(entry => {
+      if (!audio) {
+        const withAudio = (entry.phonetics || []).find(p => p.audio);
+        if (withAudio) {
+          // Some entries return protocol-relative URLs (e.g. "//...")
+          audio = withAudio.audio.startsWith('//') ? `https:${withAudio.audio}` : withAudio.audio;
+        }
+      }
+      
       (entry.meanings || []).forEach(m => {
         // Collect synonyms and antonyms at meaning level
         (m.synonyms || []).forEach(s => syns.add(s));
@@ -125,7 +134,8 @@ async function fetchDefinition(word) {
     const result = {
       defs: defs.slice(0, CONFIG.maxDefinitions),
       synonyms: Array.from(syns).slice(0, CONFIG.maxSynonyms),
-      antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms)
+      antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms),
+      audio
     };
     
     // Cache result and trigger debounced save

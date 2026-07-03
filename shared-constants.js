@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   TARGET_LANGUAGE: 'wordglance-target-language',
   SOURCE_LANGUAGE: 'wordglance-source-language',
   DARK_MODE: 'wordglance-dark-mode',
+  DISABLED_SITES: 'wordglance-disabled-sites',
   CACHE_DEFINITIONS: 'wordglance-cache-definitions',
   CACHE_TRANSLATIONS: 'wordglance-cache-translations'
 };
@@ -16,7 +17,8 @@ const STORAGE_KEYS = {
 const DEFAULT_VALUES = {
   TARGET_LANGUAGE: 'en',
   SOURCE_LANGUAGE: 'auto',
-  DARK_MODE: false
+  DARK_MODE: false,
+  DISABLED_SITES: []
 };
 
 // Message types for runtime communication

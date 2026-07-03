@@ -126,6 +126,39 @@ async function clearCache() {
   await sendMessage({ type: MESSAGE_TYPES.CLEAR_CACHE });
 }
 
+// Reads the active tab's hostname (requires activeTab, granted when the popup opens).
+// Returns null for pages where a site toggle doesn't make sense (e.g. internal browser pages).
+async function getActiveTabHostname() {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url) return null;
+    const { protocol, hostname } = new URL(tab.url);
+    return ['http:', 'https:'].includes(protocol) ? hostname : null;
+  } catch (e) {
+    console.warn('Failed to read active tab:', e);
+    return null;
+  }
+}
+
+async function setupSiteToggle() {
+  const section = document.getElementById('site-toggle-section');
+  const toggle = document.getElementById('site-toggle');
+  const hostnameLabel = document.getElementById('site-hostname');
+
+  const hostname = await getActiveTabHostname();
+  if (!hostname) {
+    section.style.display = 'none';
+    return;
+  }
+
+  hostnameLabel.textContent = `${hostname} — refresh page after changing`;
+  toggle.checked = !(await SiteUtils.isSiteDisabled(hostname));
+
+  toggle.addEventListener('change', async () => {
+    await SiteUtils.setSiteDisabled(hostname, !toggle.checked);
+  });
+}
+
 async function init() {
   const elements = {
     app: document.getElementById('wg-settings'),
@@ -176,6 +209,9 @@ async function init() {
 
   // Setup cache management
   elements.clearBtn.addEventListener('click', clearCache);
+
+  // Setup per-site enable/disable toggle
+  await setupSiteToggle();
 
   // Global click handler to close dropdowns
   document.addEventListener('click', () => {

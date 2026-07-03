@@ -47,6 +47,31 @@ const StorageUtils = {
   }
 };
 
+// Per-site enable/disable list. Matches by exact hostname (e.g. "docs.example.com"
+// and "example.com" are treated as different sites).
+const SiteUtils = {
+  async getDisabledSites() {
+    const stored = await StorageUtils.get(STORAGE_KEYS.DISABLED_SITES);
+    const list = stored[STORAGE_KEYS.DISABLED_SITES];
+    return Array.isArray(list) ? list : DEFAULT_VALUES.DISABLED_SITES;
+  },
+
+  async isSiteDisabled(hostname) {
+    if (!hostname) return false;
+    const sites = await this.getDisabledSites();
+    return sites.includes(hostname);
+  },
+
+  async setSiteDisabled(hostname, disabled) {
+    const sites = await this.getDisabledSites();
+    const next = disabled
+      ? Array.from(new Set([...sites, hostname]))
+      : sites.filter(site => site !== hostname);
+    await StorageUtils.set({ [STORAGE_KEYS.DISABLED_SITES]: next });
+    return next;
+  }
+};
+
 // Text sanitization utility
 const TextUtils = {
   sanitize(text) {

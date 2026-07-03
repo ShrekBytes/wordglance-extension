@@ -811,9 +811,6 @@
         left: `${Math.round(bestPosition.left)}px`,
         top: `${Math.round(bestPosition.top)}px`
       });
-    
-      // Store position info for debugging (optional)
-      tooltip.setAttribute('data-position', bestPosition.name || 'adjusted');
     }
 
     function showTooltipUI() {
@@ -924,7 +921,7 @@
           updatePronunciation(defResponse.data.audio);
         } else {
           defSlider.textContent = '';
-          if (defResponse.error === 'Definitions are only available for English words') {
+          if (defResponse.error === ERROR_MESSAGES.SOURCE_NOT_ENGLISH) {
             const infoPage = createElement('div', 'content-page');
             infoPage.appendChild(createElement('div', 'definition-content info', 
               'Definitions are only available for English words. Please select English as the source language.'));
@@ -992,6 +989,5 @@
     // Initialize - Load settings and apply dark mode immediately
     await loadSettings();
     updateDarkMode(); // Apply dark mode immediately after settings load
-    console.log('WordGlance extension loaded. Select text and click the 📖 icon.');
   })();
 })();

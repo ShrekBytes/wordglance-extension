@@ -13,7 +13,7 @@ const CONFIG = {
   maxSynonyms: 6,
   maxAntonyms: 6,
   cacheSize: 500,
-  apiTimeout: 100000,
+  apiTimeout: 10000,
   debounceDelay: 100,
   cacheSaveDelay: 2000 // Debounce cache saving
 };

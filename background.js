@@ -81,18 +81,32 @@ async function clearAllCaches() {
 // API functions
 async function fetchDefinition(word) {
   const key = TextUtils.sanitize(word)?.toLowerCase();
-  if (!key) throw new Error('Invalid word');
+  if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
   
   // Check cache first
   const cached = caches.definitions.get(key);
   if (cached) return cached;
   
+  let res;
   try {
-    const res = await fetchWithTimeout(
+    res = await fetchWithTimeout(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`
     );
-    
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (e) {
+    // The fetch itself failed - offline, DNS, timed out, etc. This is a genuine connection problem.
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
+  
+  // The API responds with 404 when the word simply has no entry - that's not a connection
+  // problem, so it gets its own accurate message instead of the generic network error.
+  if (res.status === 404) {
+    throw new Error(ERROR_MESSAGES.NO_DEFINITION);
+  }
+  if (!res.ok) {
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
+  
+  try {
     const data = await res.json();
     
     // Extract definitions, synonyms, antonyms, and pronunciation audio
@@ -149,7 +163,7 @@ async function fetchDefinition(word) {
 
 async function fetchTranslation(text) {
   const cleanText = TextUtils.sanitize(text);
-  if (!cleanText) throw new Error('Invalid text');
+  if (!cleanText) throw new Error(ERROR_MESSAGES.INVALID_TEXT);
   
   // Create cache key with language settings
   const key = `${cleanText}::${settings.sourceLanguage}::${settings.targetLanguage}`;
@@ -232,7 +246,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
         if (settings.sourceLanguage !== 'en' && settings.sourceLanguage !== 'auto') {
           return {
             success: false,
-            error: 'Definitions are only available for English words'
+            error: ERROR_MESSAGES.SOURCE_NOT_ENGLISH
           };
         }
         const defResult = await fetchDefinition(msg.word);
@@ -287,6 +301,5 @@ browser.storage.onChanged.addListener((changes, area) => {
 // this runs would repopulate the in-memory cache with the data we just cleared.
 browser.runtime.onStartup.addListener(async () => {
   await cachesReady;
-  console.log('WordGlance: Clearing caches on browser startup');
   await clearAllCaches();
 });

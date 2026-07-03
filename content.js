@@ -27,13 +27,11 @@
     settingsLoaded = true;
   }
 
-  // Function to reset tooltip state when settings change
+  // Resets tooltip UI and pagination state; called when language settings change
   function resetTooltipState() {
-    // Hide tooltip and trigger if they're visible
     hideTooltip();
     hideTrigger();
     
-    // Reset pagination state
     currentDefinitionPage = 0;
     currentTranslationPage = 0;
     definitionPages = [];
@@ -41,7 +39,6 @@
     definitionPageHeights = [];
     translationPageHeights = [];
     
-    // Clear current selection
     currentSelection = '';
     selectionRect = null;
   }
@@ -63,7 +60,7 @@
     }
     
     if (changes[STORAGE_KEYS.DARK_MODE]) {
-      // Fix: Use nullish coalescing to properly handle false values
+      // Nullish coalescing (not ||) so an explicit `false` isn't replaced by the default
       settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
       updateDarkMode();
     }
@@ -540,7 +537,6 @@
     
     if (kind) {
       const container = slider.closest('.content-container');
-      const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
       const target = getPageHeight(slider, index, kind);
       if (container && target) smoothHeightTransition(container, target);
     }
@@ -731,7 +727,6 @@
       }
     ];
     
-    // Function to check if a position fits within viewport
     function fitsInViewport(pos) {
       return pos.left >= margin && 
              pos.top >= margin && 
@@ -739,7 +734,6 @@
              pos.top + tooltipHeight <= vh - margin;
     }
     
-    // Find the first position that fits
     let bestPosition = null;
     for (const pos of positions) {
       if (fitsInViewport(pos)) {
@@ -775,7 +769,6 @@
       }
     }
     
-    // Apply the position
     Object.assign(tooltip.style, {
       left: `${Math.round(bestPosition.left)}px`,
       top: `${Math.round(bestPosition.top)}px`
@@ -931,10 +924,6 @@
       requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
     }
 
-    // Update word count
-    sendMessage({ type: MESSAGE_TYPES.UPDATE_WORD_COUNT }).catch(e => 
-      console.warn('Failed to update word count:', e)
-    );
   });
 
   // Event delegation and cleanup

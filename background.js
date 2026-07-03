@@ -23,7 +23,7 @@ async function loadSettings() {
     STORAGE_KEYS.DARK_MODE
   ]);
   
-  // Fix: Use proper boolean handling instead of || operator
+  // Use getValue (not ||) so an explicitly stored false/0 isn't overridden by the default
   settings.targetLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE);
   settings.sourceLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE);
   settings.darkMode = StorageUtils.getValue(stored, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE);
@@ -54,6 +54,8 @@ async function loadCaches() {
     console.warn('Cache loading error:', e);
   }
 }
+
+const cachesReady = loadCaches();
 
 // Debounced cache saving to reduce storage writes
 const saveCaches = debounce(async () => {
@@ -200,20 +202,8 @@ async function fetchTranslation(text) {
   }
 }
 
-async function updateWordCount() {
-  try {
-    const current = await StorageUtils.getSetting(STORAGE_KEYS.TOTAL_WORDS_LEARNED, 0);
-    const newCount = current + 1;
-    await StorageUtils.set({ [STORAGE_KEYS.TOTAL_WORDS_LEARNED]: newCount });
-    return newCount;
-  } catch (e) {
-    console.warn('Failed to update word count:', e);
-    return 0;
-  }
-}
-
 // Message handling
-browser.runtime.onMessage.addListener(async (msg, sender) => {
+browser.runtime.onMessage.addListener(async (msg) => {
   try {
     await settingsReady;
 
@@ -242,10 +232,6 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
         const transResult = await fetchTranslation(msg.text);
         return { success: true, data: transResult };
         
-      case MESSAGE_TYPES.UPDATE_WORD_COUNT:
-        const newCount = await updateWordCount();
-        return { success: true, data: { count: newCount } };
-        
       case MESSAGE_TYPES.CLEAR_CACHE:
         await clearAllCaches();
         return { success: true };
@@ -256,18 +242,6 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
           [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}'
         });
         return { success: true };
-        
-      case MESSAGE_TYPES.WORDGLANCE_FETCH:
-        // Fallback network proxy for content script
-    const { url, init } = msg;
-        const response = await fetch(url, init);
-        return {
-          ok: response.ok,
-          status: response.status,
-          statusText: response.statusText,
-          headers: Array.from(response.headers.entries()),
-          text: await response.text()
-        };
         
       default:
         return { success: false, error: 'Unknown message type' };
@@ -293,16 +267,16 @@ browser.storage.onChanged.addListener((changes, area) => {
   }
   
   if (changes[STORAGE_KEYS.DARK_MODE]) {
-    // Fix: Use nullish coalescing to properly handle false values
+    // Nullish coalescing (not ||) so an explicit `false` isn't replaced by the default
     settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
   }
 });
 
-// Clear caches on browser startup to ensure fresh data
+// Clear caches on browser startup to ensure fresh data.
+// Waits for the initial cache load first, otherwise a load that resolves after
+// this runs would repopulate the in-memory cache with the data we just cleared.
 browser.runtime.onStartup.addListener(async () => {
+  await cachesReady;
   console.log('WordGlance: Clearing caches on browser startup');
   await clearAllCaches();
 });
-
-// Initialize
-loadCaches();

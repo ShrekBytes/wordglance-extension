@@ -1,11 +1,9 @@
 /*
   Popup: Settings UI for WordGlance extension
-  Handles language selection, dark mode, cache management, and usage statistics
+  Handles language selection, dark mode, and cache management
 */
 
 // Popup-specific utilities (shared constants loaded from shared-constants.js)
-
-// Utilities
 const getLanguageName = (code) => LANGUAGES[code] || code.toUpperCase();
 
 function renderLanguageOptions(container, includeAuto) {
@@ -119,7 +117,6 @@ async function clearCache() {
   const confirmed = confirm(
     'Are you sure you want to clear all cached data?\n\n' +
     'This will delete:\n• All cached definitions and translations\n\n' +
-    'Your words learned counter will not be affected.\n' +
     'This action cannot be undone.'
   );
   
@@ -130,32 +127,25 @@ async function clearCache() {
 }
 
 async function init() {
-  // Get DOM elements
   const elements = {
     app: document.getElementById('wg-settings'),
     darkToggle: document.getElementById('dark-mode'),
-    clearBtn: document.getElementById('clear-cache-btn'),
-    usageNumber: document.getElementById('usage-number')
+    clearBtn: document.getElementById('clear-cache-btn')
   };
 
-  // Load current settings with proper boolean handling
+  // Load current settings (getValue, not the raw object, so a stored `false` isn't lost)
   const store = await StorageUtils.get([
     STORAGE_KEYS.DARK_MODE,
     STORAGE_KEYS.SOURCE_LANGUAGE,
-    STORAGE_KEYS.TARGET_LANGUAGE,
-    STORAGE_KEYS.TOTAL_WORDS_LEARNED
+    STORAGE_KEYS.TARGET_LANGUAGE
   ]);
 
   const settings = {
-    // Fix: Use StorageUtils.getValue for proper boolean handling
     isDark: StorageUtils.getValue(store, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE),
     sourceLang: StorageUtils.getValue(store, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE),
-    targetLang: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE),
-    wordsLearned: StorageUtils.getValue(store, STORAGE_KEYS.TOTAL_WORDS_LEARNED, DEFAULT_VALUES.TOTAL_WORDS_LEARNED)
+    targetLang: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE)
   };
 
-  // Initialize UI
-  elements.usageNumber.textContent = String(settings.wordsLearned);
   elements.darkToggle.checked = settings.isDark;
   toggleDarkMode(settings.isDark);
 

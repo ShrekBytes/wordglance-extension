@@ -40,14 +40,10 @@ const StorageUtils = {
     }
   },
 
-  // Properly handle boolean values (fix for theme bug)
+  // Returns the stored value if the key is present, otherwise the default.
+  // Using hasOwnProperty (not ||) ensures explicit false/0 values aren't lost.
   getValue(stored, key, defaultValue) {
     return stored.hasOwnProperty(key) ? stored[key] : defaultValue;
-  },
-
-  async getSetting(key, defaultValue) {
-    const result = await this.get([key]);
-    return this.getValue(result, key, defaultValue);
   }
 };
 

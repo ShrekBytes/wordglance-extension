@@ -8,7 +8,6 @@ const STORAGE_KEYS = {
   TARGET_LANGUAGE: 'wordglance-target-language',
   SOURCE_LANGUAGE: 'wordglance-source-language',
   DARK_MODE: 'wordglance-dark-mode',
-  TOTAL_WORDS_LEARNED: 'wordglance-total-words-learned',
   CACHE_DEFINITIONS: 'wordglance-cache-definitions',
   CACHE_TRANSLATIONS: 'wordglance-cache-translations'
 };
@@ -17,8 +16,7 @@ const STORAGE_KEYS = {
 const DEFAULT_VALUES = {
   TARGET_LANGUAGE: 'en',
   SOURCE_LANGUAGE: 'auto',
-  DARK_MODE: false,
-  TOTAL_WORDS_LEARNED: 0
+  DARK_MODE: false
 };
 
 // Message types for runtime communication
@@ -26,10 +24,8 @@ const MESSAGE_TYPES = {
   GET_DEFINITION: 'GET_DEFINITION',
   GET_TRANSLATION: 'GET_TRANSLATION',
   GET_SETTINGS: 'GET_SETTINGS',
-  UPDATE_WORD_COUNT: 'UPDATE_WORD_COUNT',
   CLEAR_CACHE: 'CLEAR_CACHE',
-  CLEAR_TRANSLATION_CACHE: 'CLEAR_TRANSLATION_CACHE',
-  WORDGLANCE_FETCH: 'WORDGLANCE_FETCH'
+  CLEAR_TRANSLATION_CACHE: 'CLEAR_TRANSLATION_CACHE'
 };
 
 // Supported languages for translation and UI

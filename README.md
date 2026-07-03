@@ -81,8 +81,7 @@ Click the extension icon to access settings:
 - **Languages** - Choose source and target languages (defaults to Auto → English)
 - **Cache** - Clear stored data if needed
 
-<img src="/screenshots/settings_dark.png" width="666" alt="Settings Dark Mode">
-<img src="/screenshots/settings_light.png" width="666" alt="Settings Light Mode">
+<img src="/screenshots/settings.png" width="666" alt="Settings Dark Mode">
 
 
 ### Popular language combinations:

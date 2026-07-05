@@ -5,7 +5,9 @@ Or get the [userscript version](https://github.com/ShrekBytes/WordGlance).
 **✨ What it does:**
 
 - **Dictionary**: Get definitions, examples, synonyms, and antonyms instantly
+- **Pronunciation**: Hear words read aloud with one tap, when audio is available
 - **Translation**: Translate to 40+ languages with one click
+- **Per-site control**: Turn WordGlance off on individual websites, right from the popup
 - **Mobile-friendly**: Works perfectly on both desktop and mobile
 - **Customizable**: Choose your preferred languages and settings
 
@@ -14,7 +16,7 @@ Or get the [userscript version](https://github.com/ShrekBytes/WordGlance).
 1. Select any text on any website
 2. Click the 📖 icon that appears
 3. Get instant definitions and translations
-4. Use arrow keys to browse multiple results
+4. Click the ‹ › arrows to browse multiple results
 
 **Supported Languages:**
 
@@ -26,16 +28,16 @@ Amharic, Arabic, Bengali, Bulgarian, Chinese, Croatian, Czech, Danish, Dutch, En
 - Customizable target language (defaults to English)
 - Dark mode toggle
 - Smart caching system
-- Works on all websites
+- Works on all websites (or turn it off per-site)
 - No account required
 - Completely free and open source
 
 **Privacy & Security:**
 
-- No data collection
-- Everything stays in your browser
-- Open source code
-- No tracking or ads
+- The word or phrase you select is sent directly to the [Dictionary API](https://dictionaryapi.dev/) and/or our translation API to fetch results - that's the only data that ever leaves your browser
+- We don't run analytics, tracking, or ads, and we don't log or store your lookups ourselves
+- Settings and cache stay in your browser's local storage
+- Open source code, so you can verify all of this yourself
 
 **Browser Support:**
 

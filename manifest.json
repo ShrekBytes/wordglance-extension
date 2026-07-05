@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "WordGlance - Dictionary & Translation",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "description": "Get instant dictionary definitions and translations for any text on any website!",
   "icons": {
     "16": "assets/icon_16.png",
@@ -18,9 +18,10 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "{f83d5c69-cfd7-4d8d-b2eb-555d2d4b7001}",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": [
-          "none"
+          "websiteContent"
         ]
       }
     }

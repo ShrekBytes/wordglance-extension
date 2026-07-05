@@ -23,7 +23,7 @@ function closeDropdown(prefix) {
   const dropdown = document.querySelector(`#${prefix}-language-dropdown`);
   const search = document.querySelector(`#${prefix}-language-search`);
   const options = document.querySelector(`#${prefix}-language-options`);
-  
+
   if (dropdown) dropdown.classList.remove('open');
   if (search) search.value = '';
   if (options) {
@@ -43,7 +43,7 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
   // Initialize
   elements.label.textContent = getLanguageName(currentCode);
   renderLanguageOptions(elements.options, isSource);
-  
+
   // Mark selected option
   elements.options.querySelectorAll('.language-option').forEach(opt => {
     opt.classList.toggle('selected', opt.dataset.code === currentCode);
@@ -53,11 +53,11 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
   elements.selector.addEventListener('click', (e) => {
     if (!elements.dropdown.contains(e.target)) {
       e.stopPropagation();
-      
+
       // Close other dropdown
       const otherPrefix = prefix === 'source' ? 'target' : 'source';
       closeDropdown(otherPrefix);
-      
+
       elements.dropdown.classList.toggle('open');
       if (elements.dropdown.classList.contains('open')) {
         setTimeout(() => elements.search.focus(), 50);
@@ -89,18 +89,18 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
   elements.options.addEventListener('click', async (e) => {
     const option = e.target.closest('.language-option');
     if (!option) return;
-    
+
     const newCode = option.dataset.code;
-    
+
     // Update selection (always update, even if same language is selected)
     elements.options.querySelectorAll('.language-option.selected')
       .forEach(opt => opt.classList.remove('selected'));
     option.classList.add('selected');
     elements.label.textContent = getLanguageName(newCode);
-    
+
     // Always call onChange to ensure the setting is properly saved
     await onChange(newCode);
-    
+
     closeDropdown(prefix);
   });
 }
@@ -108,7 +108,7 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
 function toggleDarkMode(isDark) {
   const app = document.getElementById('wg-settings');
   const methods = isDark ? 'add' : 'remove';
-  
+
   app.classList[methods]('dark-mode');
   document.body.classList[methods]('dark-page');
 }
@@ -119,9 +119,9 @@ async function clearCache() {
     'This will delete:\n• All cached definitions and translations\n\n' +
     'This action cannot be undone.'
   );
-  
+
   if (!confirmed) return;
-  
+
   // Use background script to clear cache
   await sendMessage({ type: MESSAGE_TYPES.CLEAR_CACHE });
 }
@@ -161,7 +161,6 @@ async function setupSiteToggle() {
 
 async function init() {
   const elements = {
-    app: document.getElementById('wg-settings'),
     darkToggle: document.getElementById('dark-mode'),
     clearBtn: document.getElementById('clear-cache-btn')
   };
@@ -174,13 +173,13 @@ async function init() {
   ]);
 
   const settings = {
-    isDark: StorageUtils.getValue(store, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE),
-    sourceLang: StorageUtils.getValue(store, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE),
-    targetLang: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE)
+    darkMode: StorageUtils.getValue(store, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE),
+    sourceLanguage: StorageUtils.getValue(store, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE),
+    targetLanguage: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE)
   };
 
-  elements.darkToggle.checked = settings.isDark;
-  toggleDarkMode(settings.isDark);
+  elements.darkToggle.checked = settings.darkMode;
+  toggleDarkMode(settings.darkMode);
 
   // Setup dark mode toggle
   elements.darkToggle.addEventListener('change', async () => {
@@ -190,21 +189,21 @@ async function init() {
   });
 
   // Setup language selectors
-  setupSelector('source', true, settings.sourceLang, async (code) => {
+  setupSelector('source', true, settings.sourceLanguage, async (code) => {
     await StorageUtils.set({ [STORAGE_KEYS.SOURCE_LANGUAGE]: code });
-    settings.sourceLang = code;
+    settings.sourceLanguage = code;
   });
 
-  setupSelector('target', false, settings.targetLang, async (code) => {
-    const previousLang = settings.targetLang;
+  setupSelector('target', false, settings.targetLanguage, async (code) => {
+    const previousLanguage = settings.targetLanguage;
     await StorageUtils.set({ [STORAGE_KEYS.TARGET_LANGUAGE]: code });
-    
+
     // Only clear translation cache when target language actually changes
-    if (code !== previousLang) {
+    if (code !== previousLanguage) {
       await sendMessage({ type: MESSAGE_TYPES.CLEAR_TRANSLATION_CACHE });
     }
-    
-    settings.targetLang = code;
+
+    settings.targetLanguage = code;
   });
 
   // Setup cache management

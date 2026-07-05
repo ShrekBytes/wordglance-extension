@@ -35,14 +35,14 @@
     function resetTooltipState() {
       hideTooltip();
       hideTrigger();
-    
+
       currentDefinitionPage = 0;
       currentTranslationPage = 0;
       definitionPages = [];
       translationPages = [];
       definitionPageHeights = [];
       translationPageHeights = [];
-    
+
       currentSelection = '';
       selectionRect = null;
     }
@@ -50,19 +50,19 @@
     // Listen for storage changes from popup with proper boolean handling
     browser.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
-    
+
       if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
         settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue ?? DEFAULT_VALUES.TARGET_LANGUAGE;
         updateTranslationTitle();
         resetTooltipState();
       }
-    
+
       if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
         settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue ?? DEFAULT_VALUES.SOURCE_LANGUAGE;
         updateTranslationTitle();
         resetTooltipState();
       }
-    
+
       if (changes[STORAGE_KEYS.DARK_MODE]) {
         // Nullish coalescing (not ||) so an explicit `false` isn't replaced by the default
         settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
@@ -94,11 +94,12 @@
         z-index: 99999;
       }
       .wordglance-tooltip.show { opacity: 1; transform: translateY(0) scale(1); }
-      .wordglance-tooltip.dark-mode { 
-        background: #1a1a1a; border-color: #333333; color: #e0e0e0; 
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); 
+      .wordglance-tooltip:focus { outline: none; }
+      .wordglance-tooltip.dark-mode {
+        background: #1a1a1a; border-color: #333333; color: #e0e0e0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
       }
-    
+
       .wordglance-trigger-icon {
         position: absolute; background: #3498db; color: white; border: none;
         border-radius: 50%; width: 24px; height: 24px; font-size: 12px;
@@ -117,7 +118,7 @@
 
       .wordglance-tooltip .definition-section { margin-bottom: 16px; }
       .wordglance-tooltip .translation-section { margin-bottom: 0; }
-    
+
       .wordglance-tooltip .section-title {
         font-weight: 600; color: #2c3e50; margin-bottom: 8px; font-size: 12px;
         text-transform: uppercase; letter-spacing: 0.5px; display: flex;
@@ -135,7 +136,7 @@
       .wordglance-tooltip .pronounce-button:hover { color: #2c3e50; transform: scale(1.15); }
       .wordglance-tooltip.dark-mode .pronounce-button { color: #cccccc; }
       .wordglance-tooltip.dark-mode .pronounce-button:hover { color: #ffffff; }
-    
+
       .wordglance-tooltip .slider-controls { display: flex; gap: 4px; align-items: center; }
       .wordglance-tooltip .slider-button {
         background: none; border: none; border-radius: 3px; width: 20px; height: 20px;
@@ -146,10 +147,10 @@
       .wordglance-tooltip .slider-button:disabled { opacity: 0.4; cursor: not-allowed; }
       .wordglance-tooltip.dark-mode .slider-button { color: #cccccc; }
       .wordglance-tooltip.dark-mode .slider-button:hover:not(:disabled) { color: #ffffff; }
-      .wordglance-tooltip .slider-info { 
-        font-size: 11px; color: #7f8c8d; margin: 0 4px; white-space: nowrap; 
+      .wordglance-tooltip .slider-info {
+        font-size: 11px; color: #7f8c8d; margin: 0 4px; white-space: nowrap;
       }
-    
+
       .wordglance-tooltip .content-container {
         position: relative; overflow: hidden; height: auto;
         transition: height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); will-change: height;
@@ -161,23 +162,23 @@
         min-width: 100%; max-width: 100%; flex-shrink: 0; word-wrap: break-word;
         overflow-wrap: break-word; box-sizing: border-box; height: auto;
       }
-    
+
       .wordglance-tooltip .definition-item {
         margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f8f9fa;
         word-wrap: break-word; overflow-wrap: break-word;
       }
       .wordglance-tooltip.dark-mode .definition-item { border-bottom-color: #333333; }
       .wordglance-tooltip .definition-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    
-      .wordglance-tooltip .part-of-speech { 
-        color: #7f8c8d; font-style: italic; font-size: 12px; margin-right: 8px; 
+
+      .wordglance-tooltip .part-of-speech {
+        color: #7f8c8d; font-style: italic; font-size: 12px; margin-right: 8px;
       }
       .wordglance-tooltip.dark-mode .part-of-speech { color: #cccccc; }
       .wordglance-tooltip .definition-text {
         color: #2c3e50; margin-bottom: 4px; word-wrap: break-word; overflow-wrap: break-word;
       }
       .wordglance-tooltip.dark-mode .definition-text { color: #e0e0e0; }
-    
+
       .wordglance-tooltip .translation-item { margin-bottom: 4px; word-wrap: break-word; overflow-wrap: break-word; }
       .wordglance-tooltip .translation-grid {
         display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
@@ -200,32 +201,32 @@
         min-height: 20px; background: #ffffff; position: relative; z-index: 2;
       }
       .wordglance-tooltip.dark-mode .translation-text { color: #4fc3f7; background: #1a1a1a; }
-    
+
       .wordglance-tooltip .example { font-style: italic; color: #7f8c8d; font-size: 12px; margin-top: 4px; }
       .wordglance-tooltip.dark-mode .example { color: #cccccc; }
       .wordglance-tooltip .loading { color: #7f8c8d; font-style: italic; }
       .wordglance-tooltip.dark-mode .loading { color: #cccccc; }
       .wordglance-tooltip .error { color: #e74c3c; font-size: 13px; }
       .wordglance-tooltip.dark-mode .error { color: #ff6b6b; }
-      .wordglance-tooltip .info { 
-        color: rgb(0, 60, 170); font-size: 14px; font-weight: 600; text-align: center; 
+      .wordglance-tooltip .info {
+        color: rgb(0, 60, 170); font-size: 14px; font-weight: 600; text-align: center;
         padding: 20px 16px; line-height: 1.4; font-style: italic;
       }
       .wordglance-tooltip.dark-mode .info { color: rgb(172, 219, 52); }
-    
+
       .wordglance-tooltip .synonyms-antonyms-section { margin-top: 12px; }
       .wordglance-tooltip .synonyms, .wordglance-tooltip .antonyms { margin-top: 4px; }
-      .wordglance-tooltip .synonyms-label, .wordglance-tooltip .antonyms-label { 
-        font-weight: 600; color: #2c3e50; 
+      .wordglance-tooltip .synonyms-label, .wordglance-tooltip .antonyms-label {
+        font-weight: 600; color: #2c3e50;
       }
-      .wordglance-tooltip.dark-mode .synonyms-label, .wordglance-tooltip.dark-mode .antonyms-label { 
-        color: #cccccc; 
+      .wordglance-tooltip.dark-mode .synonyms-label, .wordglance-tooltip.dark-mode .antonyms-label {
+        color: #cccccc;
       }
-      .wordglance-tooltip .synonyms-list, .wordglance-tooltip .antonyms-list { 
-        color: #7f8c8d; font-style: italic; 
+      .wordglance-tooltip .synonyms-list, .wordglance-tooltip .antonyms-list {
+        color: #7f8c8d; font-style: italic;
       }
-      .wordglance-tooltip.dark-mode .synonyms-list, .wordglance-tooltip.dark-mode .antonyms-list { 
-        color: #cccccc; 
+      .wordglance-tooltip.dark-mode .synonyms-list, .wordglance-tooltip.dark-mode .antonyms-list {
+        color: #cccccc;
       }
     `;
     shadow.appendChild(style);
@@ -249,6 +250,8 @@
     const tooltip = document.createElement('div');
     tooltip.className = 'wordglance-tooltip';
     tooltip.style.display = 'none';
+    tooltip.tabIndex = -1;
+    tooltip.setAttribute('aria-label', 'WordGlance results');
     root.appendChild(tooltip);
 
     // Build tooltip structure
@@ -349,10 +352,10 @@
     function getSelectionInfo() {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) return null;
-    
+
       const text = sel.toString().trim();
       if (!text || text.length === 0 || text.length > 100) return null;
-    
+
       try {
         const range = sel.getRangeAt(0);
         const rect = range.getBoundingClientRect();
@@ -366,12 +369,12 @@
 
     function positionTriggerIcon(x, y) {
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-        ('ontouchstart' in window) || 
+        ('ontouchstart' in window) ||
         (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
         window.matchMedia('(pointer: coarse)').matches;
       const buttonSize = isMobile ? 32 : 24;
       const halfButton = buttonSize / 2;
-    
+
       let left, top;
       if (isMobile) {
         left = Math.max(10, Math.min(x - halfButton, window.innerWidth - buttonSize - 10));
@@ -387,7 +390,7 @@
         if (left + buttonSize > window.innerWidth) left = x - buttonSize - 10;
         if (top < 0) top = y + 10;
       }
-    
+
       Object.assign(triggerIcon.style, { left: `${left}px`, top: `${top}px` });
     }
 
@@ -413,7 +416,7 @@
         tooltip.style.display = 'none';
         clearTooltipContent();
         cleanupEventListeners();
-      }, 200);
+      }, 300);
     }
 
     function cleanupEventListeners() {
@@ -432,11 +435,12 @@
         const slider = tooltip.querySelector(`.${selector}`);
         if (slider) slider.textContent = '';
       });
-    
+
       renderSynAnt([], []);
       updatePronunciation('');
       currentDefinitionPage = currentTranslationPage = 0;
-      definitionPageHeights = translationPageHeights = [];
+      definitionPageHeights = [];
+      translationPageHeights = [];
       clearCachedSelectors();
     }
 
@@ -446,7 +450,7 @@
         hideTrigger();
         return;
       }
-    
+
       currentSelection = info.text;
       selectionRect = info.rect;
       const cx = selectionRect.left + (selectionRect.width / 2);
@@ -463,7 +467,7 @@
       if (e.key === 'Escape') {
         hideTooltip();
         hideTrigger();
-        return;
+        return; // Skip the debounced re-check below, which would otherwise show the trigger again
       }
       debouncedSelectionHandler();
     }, true);
@@ -481,7 +485,7 @@
           const cy = selectionRect.top;
           positionTriggerIcon(cx, cy);
           showTrigger();
-        
+
           // Also reposition tooltip if it's visible
           repositionTooltip();
         }
@@ -556,7 +560,7 @@
       info.textContent = `${Math.min(index + 1, total)}/${total || 1}`;
       prev.disabled = index <= 0;
       next.disabled = index >= total - 1;
-    
+
       if (kind) {
         const container = slider.closest('.content-container');
         const target = getPageHeight(slider, index, kind);
@@ -577,37 +581,37 @@
       const info = tooltip.querySelector('.definition-info');
       const prev = tooltip.querySelector('.definition-prev');
       const next = tooltip.querySelector('.definition-next');
-    
+
       definitionPages = paginate(defs.slice(0, CONFIG.maxDefinitions), CONFIG.definitionsPerPage);
       currentDefinitionPage = 0;
       slider.textContent = '';
-    
+
       definitionPages.forEach(page => {
         const pageDiv = createElement('div', 'content-page');
-      
+
         if (!page.length) {
           pageDiv.appendChild(createElement('div', 'definition-content error', ERROR_MESSAGES.NO_DEFINITION));
         } else {
           page.forEach(d => {
             const defDiv = createElement('div', 'definition-item');
-          
+
             if (d.partOfSpeech) {
               defDiv.appendChild(createElement('span', 'part-of-speech', d.partOfSpeech));
             }
-          
+
             defDiv.appendChild(createElement('div', 'definition-text', d.definition));
-          
+
             if (d.example) {
               defDiv.appendChild(createElement('div', 'example', d.example));
             }
-          
+
             pageDiv.appendChild(defDiv);
           });
         }
-      
+
         slider.appendChild(pageDiv);
       });
-    
+
       definitionPageHeights = Array.from(slider.children).map(page => measurePageHeight(page, slider.clientWidth));
       updateSlider(slider, info, prev, next, currentDefinitionPage, definitionPages.length, 'definition');
       attachSliderHeightSync('definition');
@@ -618,24 +622,24 @@
       const info = tooltip.querySelector('.translation-info');
       const prev = tooltip.querySelector('.translation-prev');
       const next = tooltip.querySelector('.translation-next');
-    
+
       translationPages = paginate(items.slice(0, CONFIG.maxTranslations), CONFIG.translationsPerPage);
       currentTranslationPage = 0;
       slider.textContent = '';
-    
+
       translationPages.forEach(page => {
         const pageDiv = createElement('div', 'content-page');
         const grid = createElement('div', 'translation-grid');
-      
-        for (let i = 0; i < 4; i++) {
+
+        for (let i = 0; i < CONFIG.translationsPerPage; i++) {
           const cell = createElement('div', 'translation-text', page[i] || '');
           grid.appendChild(cell);
         }
-      
+
         pageDiv.appendChild(grid);
         slider.appendChild(pageDiv);
       });
-    
+
       translationPageHeights = Array.from(slider.children).map(page => measurePageHeight(page, slider.clientWidth));
       updateSlider(slider, info, prev, next, currentTranslationPage, translationPages.length, 'translation');
       attachSliderHeightSync('translation');
@@ -687,7 +691,7 @@
     function attachSliderHeightSync(kind) {
       const slider = tooltip.querySelector(`.${kind}-slider`);
       if (!slider) return;
-    
+
       const handler = (e) => {
         if (e.propertyName === 'transform') {
           const container = slider.closest('.content-container');
@@ -696,7 +700,7 @@
           if (container && target) smoothHeightTransition(container, target);
         }
       };
-    
+
       if (slider._heightHandler) slider.removeEventListener('transitionend', slider._heightHandler);
       slider.addEventListener('transitionend', handler);
       slider._heightHandler = handler;
@@ -707,12 +711,12 @@
       const spacing = 12;
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-    
+
       // Get actual tooltip dimensions after content is rendered
       const tRect = tooltip.getBoundingClientRect();
       const tooltipWidth = tRect.width || 320; // fallback for initial positioning
       const tooltipHeight = tRect.height || 200; // fallback for initial positioning
-    
+
       // Define possible positions in order of preference
       const positions = [
         // Above (preferred)
@@ -764,14 +768,14 @@
           top: rect.bottom + spacing
         }
       ];
-    
+
       function fitsInViewport(pos) {
-        return pos.left >= margin && 
-               pos.top >= margin && 
-               pos.left + tooltipWidth <= vw - margin && 
+        return pos.left >= margin &&
+               pos.top >= margin &&
+               pos.left + tooltipWidth <= vw - margin &&
                pos.top + tooltipHeight <= vh - margin;
       }
-    
+
       let bestPosition = null;
       for (const pos of positions) {
         if (fitsInViewport(pos)) {
@@ -779,25 +783,25 @@
           break;
         }
       }
-    
+
       // If no position fits perfectly, use the preferred position and adjust
       if (!bestPosition) {
         bestPosition = positions[0]; // Default to above
-      
+
         // Adjust horizontally
         if (bestPosition.left < margin) {
           bestPosition.left = margin;
         } else if (bestPosition.left + tooltipWidth > vw - margin) {
           bestPosition.left = vw - tooltipWidth - margin;
         }
-      
+
         // Adjust vertically
         if (bestPosition.top < margin) {
           bestPosition.top = margin;
         } else if (bestPosition.top + tooltipHeight > vh - margin) {
           bestPosition.top = vh - tooltipHeight - margin;
         }
-      
+
         // If still doesn't fit vertically, try below the selection
         if (bestPosition.top < margin) {
           bestPosition.top = rect.bottom + spacing;
@@ -806,7 +810,7 @@
           }
         }
       }
-    
+
       Object.assign(tooltip.style, {
         left: `${Math.round(bestPosition.left)}px`,
         top: `${Math.round(bestPosition.top)}px`
@@ -817,6 +821,7 @@
       tooltip.style.display = 'block';
       updateDarkMode();
       requestAnimationFrame(() => tooltip.classList.add('show'));
+      tooltip.focus({ preventScroll: true });
     }
 
     function repositionTooltip() {
@@ -836,38 +841,38 @@
         tooltip.querySelector(prev).addEventListener('click', () => {
           const currentPage = type === 'definition' ? currentDefinitionPage : currentTranslationPage;
           const pages = type === 'definition' ? definitionPages : translationPages;
-        
+
           if (currentPage <= 0) return;
-        
+
           if (type === 'definition') currentDefinitionPage--;
           else currentTranslationPage--;
-        
+
           const slider = tooltip.querySelector(`.${type}-slider`);
           const info = tooltip.querySelector(`.${type}-info`);
           const prevBtn = tooltip.querySelector(prev);
           const nextBtn = tooltip.querySelector(next);
-        
-          updateSlider(slider, info, prevBtn, nextBtn, 
-            type === 'definition' ? currentDefinitionPage : currentTranslationPage, 
+
+          updateSlider(slider, info, prevBtn, nextBtn,
+            type === 'definition' ? currentDefinitionPage : currentTranslationPage,
             pages.length, type);
         });
 
         tooltip.querySelector(next).addEventListener('click', () => {
           const currentPage = type === 'definition' ? currentDefinitionPage : currentTranslationPage;
           const pages = type === 'definition' ? definitionPages : translationPages;
-        
+
           if (currentPage >= pages.length - 1) return;
-        
+
           if (type === 'definition') currentDefinitionPage++;
           else currentTranslationPage++;
-        
+
           const slider = tooltip.querySelector(`.${type}-slider`);
           const info = tooltip.querySelector(`.${type}-info`);
           const prevBtn = tooltip.querySelector(prev);
           const nextBtn = tooltip.querySelector(next);
-        
-          updateSlider(slider, info, prevBtn, nextBtn, 
-            type === 'definition' ? currentDefinitionPage : currentTranslationPage, 
+
+          updateSlider(slider, info, prevBtn, nextBtn,
+            type === 'definition' ? currentDefinitionPage : currentTranslationPage,
             pages.length, type);
         });
       });
@@ -881,8 +886,8 @@
       e.stopPropagation();
       if (!currentSelection) return;
 
-      getCachedSelector('wordTitle', '.word-title').textContent = currentSelection.length > 50 
-        ? currentSelection.substring(0, 47) + '...' 
+      getCachedSelector('wordTitle', '.word-title').textContent = currentSelection.length > 50
+        ? currentSelection.substring(0, 47) + '...'
         : currentSelection;
       updateTranslationTitle();
 
@@ -910,11 +915,11 @@
 
       // Fetch definitions
       try {
-        const defResponse = await sendMessage({ 
-          type: MESSAGE_TYPES.GET_DEFINITION, 
-          word: currentSelection 
+        const defResponse = await sendMessage({
+          type: MESSAGE_TYPES.GET_DEFINITION,
+          word: currentSelection
         });
-      
+
         if (defResponse.success) {
           renderDefinitionPages(defResponse.data.defs);
           renderSynAnt(defResponse.data.synonyms, defResponse.data.antonyms);
@@ -923,7 +928,7 @@
           defSlider.textContent = '';
           if (defResponse.error === ERROR_MESSAGES.SOURCE_NOT_ENGLISH) {
             const infoPage = createElement('div', 'content-page');
-            infoPage.appendChild(createElement('div', 'definition-content info', 
+            infoPage.appendChild(createElement('div', 'definition-content info',
               'Definitions are only available for English words. Please select English as the source language.'));
             defSlider.appendChild(infoPage);
           } else {
@@ -931,7 +936,7 @@
           }
           renderSynAnt([], []);
         }
-      
+
         // Reposition tooltip after content is loaded
         requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
       } catch (err) {
@@ -942,18 +947,18 @@
 
       // Fetch translations
       try {
-        const transResponse = await sendMessage({ 
-          type: MESSAGE_TYPES.GET_TRANSLATION, 
-          text: currentSelection 
+        const transResponse = await sendMessage({
+          type: MESSAGE_TYPES.GET_TRANSLATION,
+          text: currentSelection
         });
-      
+
         if (transResponse.success) {
           renderTranslationPages(transResponse.data.translations);
         } else {
           transSlider.textContent = '';
           transSlider.appendChild(createContentPage(transResponse.error, true));
         }
-      
+
         // Reposition tooltip after content is loaded
         requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
       } catch (err) {
@@ -961,7 +966,6 @@
         transSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
         requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
       }
-
     });
 
     // Event delegation and cleanup
@@ -970,24 +974,17 @@
       el.addEventListener('click', e => e.stopPropagation());
     });
 
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        hideTooltip();
-        hideTrigger();
-      }
-    });
-
     document.addEventListener('click', (e) => {
       const path = e.composedPath();
       if (path.includes(tooltip) || path.includes(triggerIcon)) return;
-    
+
       hideTooltip();
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) hideTrigger();
     }, true);
 
-    // Initialize - Load settings and apply dark mode immediately
+    // Load settings, then apply dark mode immediately to avoid a flash of the wrong theme
     await loadSettings();
-    updateDarkMode(); // Apply dark mode immediately after settings load
+    updateDarkMode();
   })();
 })();

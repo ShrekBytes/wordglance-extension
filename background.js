@@ -4,7 +4,7 @@
 */
 
 // State management
-let settings = {
+const settings = {
   targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
   sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
   darkMode: DEFAULT_VALUES.DARK_MODE
@@ -22,7 +22,7 @@ async function loadSettings() {
     STORAGE_KEYS.SOURCE_LANGUAGE,
     STORAGE_KEYS.DARK_MODE
   ]);
-  
+
   // Use getValue (not ||) so an explicitly stored false/0 isn't overridden by the default
   settings.targetLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE);
   settings.sourceLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE);
@@ -40,12 +40,12 @@ async function loadCaches() {
       StorageUtils.get(STORAGE_KEYS.CACHE_DEFINITIONS),
       StorageUtils.get(STORAGE_KEYS.CACHE_TRANSLATIONS)
     ]);
-    
+
     if (defCache[STORAGE_KEYS.CACHE_DEFINITIONS]) {
       const defs = JSON.parse(defCache[STORAGE_KEYS.CACHE_DEFINITIONS]);
       caches.definitions.fromObject(defs);
     }
-    
+
     if (transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]) {
       const trans = JSON.parse(transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]);
       caches.translations.fromObject(trans);
@@ -82,11 +82,10 @@ async function clearAllCaches() {
 async function fetchDefinition(word) {
   const key = TextUtils.sanitize(word)?.toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
-  
-  // Check cache first
+
   const cached = caches.definitions.get(key);
   if (cached) return cached;
-  
+
   let res;
   try {
     res = await fetchWithTimeout(
@@ -96,7 +95,7 @@ async function fetchDefinition(word) {
     // The fetch itself failed - offline, DNS, timed out, etc. This is a genuine connection problem.
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
-  
+
   // The API responds with 404 when the word simply has no entry - that's not a connection
   // problem, so it gets its own accurate message instead of the generic network error.
   if (res.status === 404) {
@@ -105,16 +104,16 @@ async function fetchDefinition(word) {
   if (!res.ok) {
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
-  
+
   try {
     const data = await res.json();
-    
+
     // Extract definitions, synonyms, antonyms, and pronunciation audio
     const defs = [];
     const syns = new Set();
     const ants = new Set();
     let audio = '';
-    
+
     (data || []).forEach(entry => {
       if (!audio) {
         const withAudio = (entry.phonetics || []).find(p => p.audio);
@@ -123,12 +122,12 @@ async function fetchDefinition(word) {
           audio = withAudio.audio.startsWith('//') ? `https:${withAudio.audio}` : withAudio.audio;
         }
       }
-      
+
       (entry.meanings || []).forEach(m => {
         // Collect synonyms and antonyms at meaning level
         (m.synonyms || []).forEach(s => syns.add(s));
         (m.antonyms || []).forEach(a => ants.add(a));
-        
+
         // Collect definitions
         (m.definitions || []).forEach(d => {
           if (d.definition) {
@@ -144,14 +143,14 @@ async function fetchDefinition(word) {
         });
       });
     });
-    
+
     const result = {
       defs: defs.slice(0, CONFIG.maxDefinitions),
       synonyms: Array.from(syns).slice(0, CONFIG.maxSynonyms),
       antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms),
       audio
     };
-    
+
     // Cache result and trigger debounced save
     caches.definitions.set(key, result);
     saveCaches();
@@ -164,47 +163,51 @@ async function fetchDefinition(word) {
 async function fetchTranslation(text) {
   const cleanText = TextUtils.sanitize(text);
   if (!cleanText) throw new Error(ERROR_MESSAGES.INVALID_TEXT);
-  
-  // Create cache key with language settings
+
   const key = `${cleanText}::${settings.sourceLanguage}::${settings.targetLanguage}`;
-  
-  // Check cache first
   const cached = caches.translations.get(key);
   if (cached) return cached;
-  
-  // Build query parameters
-  const params = new URLSearchParams({ 
-    dl: settings.targetLanguage, 
-    text: cleanText 
+
+  const params = new URLSearchParams({
+    dl: settings.targetLanguage,
+    text: cleanText
   });
   if (settings.sourceLanguage !== 'auto') {
     params.set('sl', settings.sourceLanguage);
   }
-  
+
+  let res;
   try {
-    const res = await fetchWithTimeout(
+    res = await fetchWithTimeout(
       `https://translation-1e79fb3f3adb.herokuapp.com/translate?${params}`
     );
-    
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (e) {
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
+
+  if (!res.ok) {
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
+
+  try {
     const data = await res.json();
-    
+
     // Extract translations
     const translations = [];
     if (data?.['destination-text']) {
       translations.push(data['destination-text']);
-      
+
       // Add alternative translations
       const allTranslations = data.translations?.['all-translations'] || [];
       for (const group of allTranslations) {
-        if (Array.isArray(group) && group[0] && 
-            group[0] !== data['destination-text'] && 
+        if (Array.isArray(group) && group[0] &&
+            group[0] !== data['destination-text'] &&
             !translations.includes(group[0])) {
           translations.push(group[0]);
           if (translations.length >= CONFIG.maxTranslations) break;
         }
       }
-      
+
       // Add possible translations if we need more
       if (translations.length < CONFIG.maxTranslations) {
         const extra = (data.translations?.['possible-translations'] || [])
@@ -212,11 +215,11 @@ async function fetchTranslation(text) {
         translations.push(...extra.slice(0, CONFIG.maxTranslations - translations.length));
       }
     }
-    
-    const result = { 
-      translations: translations.slice(0, CONFIG.maxTranslations) 
+
+    const result = {
+      translations: translations.slice(0, CONFIG.maxTranslations)
     };
-    
+
     // Cache result and trigger debounced save
     caches.translations.set(key, result);
     saveCaches();
@@ -241,8 +244,8 @@ browser.runtime.onMessage.addListener(async (msg) => {
             darkMode: settings.darkMode
           }
         };
-        
-      case MESSAGE_TYPES.GET_DEFINITION:
+
+      case MESSAGE_TYPES.GET_DEFINITION: {
         if (settings.sourceLanguage !== 'en' && settings.sourceLanguage !== 'auto') {
           return {
             success: false,
@@ -251,22 +254,24 @@ browser.runtime.onMessage.addListener(async (msg) => {
         }
         const defResult = await fetchDefinition(msg.word);
         return { success: true, data: defResult };
-        
-      case MESSAGE_TYPES.GET_TRANSLATION:
+      }
+
+      case MESSAGE_TYPES.GET_TRANSLATION: {
         const transResult = await fetchTranslation(msg.text);
         return { success: true, data: transResult };
-        
+      }
+
       case MESSAGE_TYPES.CLEAR_CACHE:
         await clearAllCaches();
         return { success: true };
-        
+
       case MESSAGE_TYPES.CLEAR_TRANSLATION_CACHE:
         caches.translations.clear();
         await StorageUtils.set({
           [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}'
         });
         return { success: true };
-        
+
       default:
         return { success: false, error: 'Unknown message type' };
     }
@@ -281,15 +286,15 @@ browser.runtime.onMessage.addListener(async (msg) => {
 // Storage change listener with proper boolean handling
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  
+
   if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
     settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue ?? DEFAULT_VALUES.TARGET_LANGUAGE;
   }
-  
+
   if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
     settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue ?? DEFAULT_VALUES.SOURCE_LANGUAGE;
   }
-  
+
   if (changes[STORAGE_KEYS.DARK_MODE]) {
     // Nullish coalescing (not ||) so an explicit `false` isn't replaced by the default
     settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;

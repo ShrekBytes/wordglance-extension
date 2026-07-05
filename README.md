@@ -39,7 +39,7 @@ Get instant dictionary definitions and translations for any text on any website!
 
 ## How to install
 
-Requires Firefox 140 or later.
+Requires Firefox 142 or later.
 
 ### Firefox Extension Installation
 

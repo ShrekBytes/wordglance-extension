@@ -370,11 +370,51 @@
       const mirror = document.createElement('div');
 
       const copiedProps = [
-        'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-        'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight',
-        'textTransform', 'textIndent', 'textAlign'
+        // Box model
+        'boxSizing',
+        'width',
+        'height',
+        'paddingTop',
+        'paddingRight',
+        'paddingBottom',
+        'paddingLeft',
+
+        // Borders
+        'borderTopWidth',
+        'borderRightWidth',
+        'borderBottomWidth',
+        'borderLeftWidth',
+        'borderTopStyle',
+        'borderRightStyle',
+        'borderBottomStyle',
+        'borderLeftStyle',
+
+        // Typography
+        'fontFamily',
+        'fontSize',
+        'fontWeight',
+        'fontStyle',
+        'fontVariant',
+        'fontStretch',
+        'fontSizeAdjust',
+        'lineHeight',
+        'letterSpacing',
+        'wordSpacing',
+        'tabSize',
+
+        // Text layout
+        'textTransform',
+        'textIndent',
+        'textAlign',
+        'textDecoration',
+        'direction',
+        'writingMode',
+
+        // Overflow
+        'overflowX',
+        'overflowY'
       ];
+
       copiedProps.forEach(p => { mirror.style[p] = style[p]; });
 
       Object.assign(mirror.style, {
@@ -1077,8 +1117,22 @@
       if (path.includes(tooltip) || path.includes(triggerIcon)) return;
 
       hideTooltip();
+
+      const active = document.activeElement;
+
+      const hasInputSel =
+      active &&
+      isTextInputElement(active) &&
+      typeof active.selectionStart === 'number' &&
+      active.selectionStart !== active.selectionEnd;
+
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) hideTrigger();
+
+      if (!hasInputSel && (!sel || sel.isCollapsed)) {
+        hideTrigger();
+      }
+
+
     }, true);
 
     // Load settings, then apply dark mode immediately to avoid a flash of the wrong theme

@@ -349,7 +349,105 @@
     }
 
     // Selection handling
+
+    // Native <input>/<textarea> selections live in el.selectionStart/selectionEnd and are
+    // completely invisible to window.getSelection(), so they need their own detection path.
+    function isTextInputElement(el) {
+      if (!el) return false;
+      if (el.tagName === 'TEXTAREA') return true;
+      if (el.tagName === 'INPUT') {
+        const type = (el.type || 'text').toLowerCase();
+        return ['text', 'search', 'url', 'tel', 'email', 'password'].includes(type);
+      }
+      return false;
+    }
+
+    // Builds a hidden clone of the field's text (same font/padding/wrapping) so we can
+    // measure where the selected substring actually lands on screen, then maps that back
+    // to viewport coordinates - accounting for the field's own scroll position.
+    function getFormFieldSelectionRect(el, start, end) {
+      const style = window.getComputedStyle(el);
+      const mirror = document.createElement('div');
+
+      const copiedProps = [
+        'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+        'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight',
+        'textTransform', 'textIndent', 'textAlign'
+      ];
+      copiedProps.forEach(p => { mirror.style[p] = style[p]; });
+
+      Object.assign(mirror.style, {
+        position: 'absolute',
+        visibility: 'hidden',
+        top: '0',
+        left: '0',
+        overflow: 'hidden',
+        whiteSpace: el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre',
+        wordWrap: 'break-word'
+      });
+
+      const value = el.value;
+      const selected = document.createElement('span');
+      selected.textContent = value.substring(start, end) || '\u200b';
+
+      mirror.appendChild(document.createTextNode(value.substring(0, start)));
+      mirror.appendChild(selected);
+      mirror.appendChild(document.createTextNode(value.substring(end)));
+      document.body.appendChild(mirror);
+
+      const elRect = el.getBoundingClientRect();
+      const mirrorRect = mirror.getBoundingClientRect();
+      const spanRect = selected.getBoundingClientRect();
+
+      const left = elRect.left + (spanRect.left - mirrorRect.left) - el.scrollLeft;
+      const top = elRect.top + (spanRect.top - mirrorRect.top) - el.scrollTop;
+
+      document.body.removeChild(mirror);
+
+      // Clamp so a scrolled/clipped field can't place the trigger outside its own bounds
+      const clampedLeft = Math.max(elRect.left, Math.min(left, elRect.right));
+      const clampedTop = Math.max(elRect.top, Math.min(top, elRect.bottom));
+      const width = Math.min(spanRect.width, elRect.right - clampedLeft);
+      const height = Math.min(spanRect.height || elRect.height, elRect.bottom - clampedTop);
+
+      return {
+        left: clampedLeft,
+        top: clampedTop,
+        right: clampedLeft + width,
+        bottom: clampedTop + height,
+        width,
+        height
+      };
+    }
+
+    function getFormFieldSelectionInfo() {
+      const el = document.activeElement;
+      if (!isTextInputElement(el)) return null;
+
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      if (start == null || end == null || start === end) return null;
+
+      const text = el.value.substring(start, end).trim();
+      if (!text || text.length === 0 || text.length > 100) return null;
+
+      try {
+        const rect = getFormFieldSelectionRect(el, start, end);
+        if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+        return { text, range: null, rect };
+      } catch (e) {
+        console.warn('Form field selection error:', e);
+        return null;
+      }
+    }
+
     function getSelectionInfo() {
+      // Check native input/textarea fields first: they hold their own selection state
+      // independently of window.getSelection(), so a focused field takes priority.
+      const formInfo = getFormFieldSelectionInfo();
+      if (formInfo) return formInfo;
+
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) return null;
 

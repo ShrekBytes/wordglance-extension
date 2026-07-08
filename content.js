@@ -1,3 +1,8 @@
+/*
+  Content Script: WordGlance Extension
+  Detects text selections on the page - including native <input>/<textarea> fields -
+  and renders the lookup trigger button and definition/translation tooltip
+*/
 (() => {
   'use strict';
 
@@ -5,7 +10,6 @@
     // Skip all setup on sites the user has disabled WordGlance for
     if (await SiteUtils.isSiteDisabled(location.hostname)) return;
 
-    // State
     let currentSelection = '';
     let selectionRect = null;
     let currentDefinitionPage = 0;
@@ -18,20 +22,25 @@
     let settings = {
       targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
       sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
-      darkMode: DEFAULT_VALUES.DARK_MODE
+      darkMode: DEFAULT_VALUES.DARK_MODE,
+      formFieldsEnabled: DEFAULT_VALUES.FORM_FIELDS_ENABLED,
+      triggerPosition: DEFAULT_VALUES.TRIGGER_POSITION,
+      enableDefinitions: DEFAULT_VALUES.ENABLE_DEFINITIONS,
+      enableTranslations: DEFAULT_VALUES.ENABLE_TRANSLATIONS
     };
 
-    // Settings management
     async function loadSettings() {
       const response = await sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
       if (response.success) {
         settings = { ...settings, ...response.data };
         updateTranslationTitle();
+        updateSectionVisibility();
       }
       settingsLoaded = true;
     }
 
-    // Resets tooltip UI and pagination state; called when language settings change
+    // Resets tooltip UI and pagination state; called whenever a settings change
+    // invalidates whatever selection/tooltip is currently showing
     function resetTooltipState() {
       hideTooltip();
       hideTrigger();
@@ -47,7 +56,7 @@
       selectionRect = null;
     }
 
-    // Listen for storage changes from popup with proper boolean handling
+    // React to settings changes made from the popup
     browser.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
 
@@ -68,9 +77,32 @@
         settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
         updateDarkMode();
       }
+
+      if (changes[STORAGE_KEYS.FORM_FIELDS_ENABLED]) {
+        settings.formFieldsEnabled = changes[STORAGE_KEYS.FORM_FIELDS_ENABLED].newValue ?? DEFAULT_VALUES.FORM_FIELDS_ENABLED;
+        // A form-field selection may currently be showing the trigger/tooltip -
+        // re-evaluate immediately rather than waiting for the next selection event
+        resetTooltipState();
+      }
+
+      if (changes[STORAGE_KEYS.TRIGGER_POSITION]) {
+        settings.triggerPosition = changes[STORAGE_KEYS.TRIGGER_POSITION].newValue ?? DEFAULT_VALUES.TRIGGER_POSITION;
+        updateSelectionRect();
+      }
+
+      if (changes[STORAGE_KEYS.ENABLE_DEFINITIONS]) {
+        settings.enableDefinitions = changes[STORAGE_KEYS.ENABLE_DEFINITIONS].newValue ?? DEFAULT_VALUES.ENABLE_DEFINITIONS;
+        updateSectionVisibility();
+        if (!settings.enableDefinitions && !settings.enableTranslations) resetTooltipState();
+      }
+
+      if (changes[STORAGE_KEYS.ENABLE_TRANSLATIONS]) {
+        settings.enableTranslations = changes[STORAGE_KEYS.ENABLE_TRANSLATIONS].newValue ?? DEFAULT_VALUES.ENABLE_TRANSLATIONS;
+        updateSectionVisibility();
+        if (!settings.enableDefinitions && !settings.enableTranslations) resetTooltipState();
+      }
     });
 
-    // Shadow DOM setup
     const host = document.createElement('div');
     host.setAttribute('data-wordglance', '');
     Object.assign(host.style, {
@@ -239,7 +271,6 @@
     });
     shadow.appendChild(root);
 
-    // Create UI elements
     const triggerIcon = document.createElement('button');
     triggerIcon.className = 'wordglance-trigger-icon';
     triggerIcon.textContent = '📖';
@@ -254,7 +285,6 @@
     tooltip.setAttribute('aria-label', 'WordGlance results');
     root.appendChild(tooltip);
 
-    // Build tooltip structure
     function createElement(tag, className, textContent = '') {
       const el = document.createElement(tag);
       if (className) el.className = className;
@@ -317,10 +347,8 @@
 
     buildTooltipStructure();
 
-    // Cache frequently used DOM selectors
     const cachedSelectors = {
       wordTitle: null,
-      translationTitle: null,
       defSlider: null,
       transSlider: null,
       defContainer: null,
@@ -341,7 +369,6 @@
       });
     }
 
-    // Dark mode management
     function updateDarkMode() {
       const methods = settings.darkMode ? 'add' : 'remove';
       tooltip.classList[methods]('dark-mode');
@@ -352,12 +379,14 @@
 
     // Native <input>/<textarea> selections live in el.selectionStart/selectionEnd and are
     // completely invisible to window.getSelection(), so they need their own detection path.
+    // Only these input types support selection per the HTML spec (email, number, date, etc.
+    // do not, and throw InvalidStateError if you try to set selectionStart/selectionEnd on them).
     function isTextInputElement(el) {
       if (!el) return false;
       if (el.tagName === 'TEXTAREA') return true;
       if (el.tagName === 'INPUT') {
         const type = (el.type || 'text').toLowerCase();
-        return ['text', 'search', 'url', 'tel', 'email', 'password'].includes(type);
+        return ['text', 'search', 'url', 'tel', 'password'].includes(type);
       }
       return false;
     }
@@ -370,52 +399,25 @@
       const mirror = document.createElement('div');
 
       const copiedProps = [
-        // Box model
-        'boxSizing',
-        'width',
-        'height',
-        'paddingTop',
-        'paddingRight',
-        'paddingBottom',
-        'paddingLeft',
-
-        // Borders
-        'borderTopWidth',
-        'borderRightWidth',
-        'borderBottomWidth',
-        'borderLeftWidth',
-        'borderTopStyle',
-        'borderRightStyle',
-        'borderBottomStyle',
-        'borderLeftStyle',
-
-        // Typography
-        'fontFamily',
-        'fontSize',
-        'fontWeight',
-        'fontStyle',
-        'fontVariant',
-        'fontStretch',
-        'fontSizeAdjust',
-        'lineHeight',
-        'letterSpacing',
-        'wordSpacing',
-        'tabSize',
-
-        // Text layout
-        'textTransform',
-        'textIndent',
-        'textAlign',
-        'textDecoration',
-        'direction',
-        'writingMode',
-
-        // Overflow
-        'overflowX',
-        'overflowY'
+        'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+        'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', 'fontStretch',
+        'letterSpacing', 'wordSpacing', 'lineHeight', 'tabSize', 'direction',
+        'textTransform', 'textIndent', 'textAlign'
       ];
-
       copiedProps.forEach(p => { mirror.style[p] = style[p]; });
+
+      // A visible scrollbar eats into the field's content width without changing any
+      // box-model property, so clientWidth can be narrower than the computed 'width'
+      // implies. The mirror never has a scrollbar, so without this it can wrap text
+      // slightly later than the real field does, throwing off the measured position
+      // on wrapped lines.
+      const borderX = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+      const scrollbarWidth = el.offsetWidth - el.clientWidth - borderX;
+      if (scrollbarWidth > 0.5) {
+        const widthPx = parseFloat(style.width);
+        mirror.style.width = `${widthPx - scrollbarWidth}px`;
+      }
 
       Object.assign(mirror.style, {
         position: 'absolute',
@@ -436,14 +438,19 @@
       mirror.appendChild(document.createTextNode(value.substring(end)));
       document.body.appendChild(mirror);
 
-      const elRect = el.getBoundingClientRect();
-      const mirrorRect = mirror.getBoundingClientRect();
-      const spanRect = selected.getBoundingClientRect();
+      let elRect, mirrorRect, spanRect;
+      try {
+        elRect = el.getBoundingClientRect();
+        mirrorRect = mirror.getBoundingClientRect();
+        spanRect = selected.getBoundingClientRect();
+      } finally {
+        // Guarantee cleanup even if a measurement above throws, so a hostile or
+        // buggy page can't cause the mirror to leak in the DOM permanently
+        document.body.removeChild(mirror);
+      }
 
       const left = elRect.left + (spanRect.left - mirrorRect.left) - el.scrollLeft;
       const top = elRect.top + (spanRect.top - mirrorRect.top) - el.scrollTop;
-
-      document.body.removeChild(mirror);
 
       // Clamp so a scrolled/clipped field can't place the trigger outside its own bounds
       const clampedLeft = Math.max(elRect.left, Math.min(left, elRect.right));
@@ -462,15 +469,29 @@
     }
 
     function getFormFieldSelectionInfo() {
+      if (!settings.formFieldsEnabled) return null;
+
       const el = document.activeElement;
       if (!isTextInputElement(el)) return null;
 
-      const start = el.selectionStart;
-      const end = el.selectionEnd;
+      let start, end;
+      try {
+        start = el.selectionStart;
+        end = el.selectionEnd;
+      } catch (e) {
+        // Some browsers have thrown InvalidStateError even on read for input types
+        // that don't support selection; treat that the same as "nothing selected"
+        return null;
+      }
       if (start == null || end == null || start === end) return null;
 
+      // The mirror below clones the field's entire value, not just the selection,
+      // so skip pathologically large fields rather than force a full layout/reflow
+      // of tens of thousands of characters on every selection change.
+      if (el.value.length > CONFIG.maxMirrorFieldLength) return null;
+
       const text = el.value.substring(start, end).trim();
-      if (!text || text.length === 0 || text.length > 100) return null;
+      if (!text || text.length > CONFIG.maxSelectionLength) return null;
 
       try {
         const rect = getFormFieldSelectionRect(el, start, end);
@@ -483,6 +504,9 @@
     }
 
     function getSelectionInfo() {
+      // Nothing to look up if the user has turned off both features
+      if (!settings.enableDefinitions && !settings.enableTranslations) return null;
+
       // Check native input/textarea fields first: they hold their own selection state
       // independently of window.getSelection(), so a focused field takes priority.
       const formInfo = getFormFieldSelectionInfo();
@@ -492,7 +516,7 @@
       if (!sel || sel.isCollapsed) return null;
 
       const text = sel.toString().trim();
-      if (!text || text.length === 0 || text.length > 100) return null;
+      if (!text || text.length > CONFIG.maxSelectionLength) return null;
 
       try {
         const range = sel.getRangeAt(0);
@@ -505,28 +529,47 @@
       }
     }
 
-    function positionTriggerIcon(x, y) {
+    // Positions the trigger relative to the selection rect. settings.triggerPosition
+    // picks which side is preferred (useful when a site's own toolbar sits right above
+    // a selection and would otherwise hide the button); each side falls back to the
+    // other if there isn't room on screen.
+    function positionTriggerIcon(rect) {
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
         ('ontouchstart' in window) ||
         (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
         window.matchMedia('(pointer: coarse)').matches;
       const buttonSize = isMobile ? 32 : 24;
       const halfButton = buttonSize / 2;
+      const spacing = isMobile ? 16 : 6;
+      const cx = rect.left + (rect.width / 2);
+      const preferBottom = settings.triggerPosition === 'bottom';
 
       let left, top;
       if (isMobile) {
-        left = Math.max(10, Math.min(x - halfButton, window.innerWidth - buttonSize - 10));
-        top = y + 40;
-        if (top + buttonSize > window.innerHeight - 50) {
-          left = Math.min(x + 20, window.innerWidth - buttonSize - 10);
-          top = Math.max(10, y - halfButton);
-          if (left + buttonSize > window.innerWidth - 10) left = Math.max(10, x - buttonSize - 20);
+        left = Math.max(10, Math.min(cx - halfButton, window.innerWidth - buttonSize - 10));
+        top = preferBottom ? rect.bottom + spacing : rect.top - buttonSize - spacing;
+
+        const outOfBounds = preferBottom
+          ? top + buttonSize > window.innerHeight - 50
+          : top < 10;
+
+        if (outOfBounds) {
+          // No room on the preferred side - fall back to the original mobile
+          // behavior of tucking the button beside the selection instead
+          left = Math.min(cx + 20, window.innerWidth - buttonSize - 10);
+          top = Math.max(10, rect.top - halfButton);
+          if (left + buttonSize > window.innerWidth - 10) left = Math.max(10, cx - buttonSize - 20);
         }
       } else {
-        left = x + 10;
-        top = y - 30;
-        if (left + buttonSize > window.innerWidth) left = x - buttonSize - 10;
-        if (top < 0) top = y + 10;
+        left = cx + 10;
+        top = preferBottom ? rect.bottom + spacing : rect.top - buttonSize - spacing;
+
+        if (left + buttonSize > window.innerWidth) left = cx - buttonSize - 10;
+
+        const outOfBounds = preferBottom
+          ? top + buttonSize > window.innerHeight
+          : top < 0;
+        if (outOfBounds) top = preferBottom ? rect.top - buttonSize - spacing : rect.bottom + spacing;
       }
 
       Object.assign(triggerIcon.style, { left: `${left}px`, top: `${top}px` });
@@ -591,15 +634,12 @@
 
       currentSelection = info.text;
       selectionRect = info.rect;
-      const cx = selectionRect.left + (selectionRect.width / 2);
-      const cy = selectionRect.top;
-      positionTriggerIcon(cx, cy);
+      positionTriggerIcon(selectionRect);
       showTrigger();
     }
 
     const debouncedSelectionHandler = debounce(onSelectionEvent, CONFIG.debounceDelay);
 
-    // Event listeners
     document.addEventListener('mouseup', onSelectionEvent, true);
     document.addEventListener('keyup', (e) => {
       if (e.key === 'Escape') {
@@ -609,7 +649,7 @@
       }
       debouncedSelectionHandler();
     }, true);
-    document.addEventListener('touchend', () => setTimeout(debouncedSelectionHandler, 100), { passive: true });
+    document.addEventListener('touchend', () => setTimeout(debouncedSelectionHandler, 100), { passive: true, capture: true });
     document.addEventListener('selectionchange', () => {
       if (document.hasFocus()) setTimeout(debouncedSelectionHandler, 150);
     });
@@ -619,21 +659,20 @@
         const info = getSelectionInfo();
         if (info) {
           selectionRect = info.rect;
-          const cx = selectionRect.left + selectionRect.width / 2;
-          const cy = selectionRect.top;
-          positionTriggerIcon(cx, cy);
+          positionTriggerIcon(selectionRect);
           showTrigger();
 
-          // Also reposition tooltip if it's visible
           repositionTooltip();
         }
       }
     };
 
-    window.addEventListener('scroll', updateSelectionRect, { passive: true });
+    // Capture phase, not bubble: scroll events on a nested scrollable element (like a
+    // tall textarea) don't bubble, so a plain bubble-phase listener here would miss
+    // them and let the trigger drift away from the selection as the field scrolls.
+    window.addEventListener('scroll', updateSelectionRect, { passive: true, capture: true });
     window.addEventListener('resize', updateSelectionRect);
 
-    // Rendering functions
     function paginate(array, perPage) {
       const pages = [];
       for (let i = 0; i < array.length; i += perPage) {
@@ -648,6 +687,23 @@
         const sourceName = settings.sourceLanguage === 'auto' ? 'Auto' : settings.sourceLanguage.toUpperCase();
         const targetName = settings.targetLanguage.toUpperCase();
         titleEl.textContent = `${sourceName} → ${targetName}`;
+      }
+    }
+
+    // Synonyms/antonyms are sourced from the definitions lookup but live in their
+    // own top-level section (a sibling of .definition-section, not nested inside
+    // it), so hiding .definition-section alone doesn't hide them - they need the
+    // same enableDefinitions check applied explicitly.
+    function updateSectionVisibility() {
+      const defSection = tooltip.querySelector('.definition-section');
+      const transSection = tooltip.querySelector('.translation-section');
+      const synSection = tooltip.querySelector('.synonyms-antonyms-section');
+
+      if (defSection) defSection.style.display = settings.enableDefinitions ? '' : 'none';
+      if (transSection) transSection.style.display = settings.enableTranslations ? '' : 'none';
+      if (synSection) {
+        const hasContent = synSection.dataset.hasContent === 'true';
+        synSection.style.display = hasContent && settings.enableDefinitions ? '' : 'none';
       }
     }
 
@@ -807,7 +863,8 @@
         hasContent = true;
       }
 
-      section.style.display = hasContent ? '' : 'none';
+      section.dataset.hasContent = hasContent ? 'true' : 'false';
+      section.style.display = hasContent && settings.enableDefinitions ? '' : 'none';
     }
 
     function updatePronunciation(audioUrl) {
@@ -855,27 +912,25 @@
       const tooltipWidth = tRect.width || 320; // fallback for initial positioning
       const tooltipHeight = tRect.height || 200; // fallback for initial positioning
 
-      // Define possible positions in order of preference
+      // Candidate positions, tried in order until one fits the viewport; the four
+      // corner variants exist because the centered above/below versions can run
+      // off the left or right edge for selections near the screen's sides
       const positions = [
-        // Above (preferred)
         {
           name: 'above',
           left: rect.left + (rect.width / 2) - (tooltipWidth / 2),
           top: rect.top - tooltipHeight - spacing
         },
-        // Below
         {
           name: 'below',
           left: rect.left + (rect.width / 2) - (tooltipWidth / 2),
           top: rect.bottom + spacing
         },
-        // Right
         {
           name: 'right',
           left: rect.right + spacing,
           top: rect.top + (rect.height / 2) - (tooltipHeight / 2)
         },
-        // Left
         {
           name: 'left',
           left: rect.left - tooltipWidth - spacing,
@@ -922,18 +977,17 @@
         }
       }
 
-      // If no position fits perfectly, use the preferred position and adjust
+      // No position fit perfectly - fall back to the preferred spot (above) and
+      // clamp it into the viewport instead
       if (!bestPosition) {
         bestPosition = positions[0]; // Default to above
 
-        // Adjust horizontally
         if (bestPosition.left < margin) {
           bestPosition.left = margin;
         } else if (bestPosition.left + tooltipWidth > vw - margin) {
           bestPosition.left = vw - tooltipWidth - margin;
         }
 
-        // Adjust vertically
         if (bestPosition.top < margin) {
           bestPosition.top = margin;
         } else if (bestPosition.top + tooltipHeight > vh - margin) {
@@ -968,58 +1022,45 @@
       }
     }
 
-    // Slider navigation
+    // Repositioning must wait two frames: one for the DOM update to be reflected
+    // in layout, and one more for the content-height CSS transition to actually start,
+    // so the tooltip's final size is known before we recompute its position.
+    function repositionAfterRender() {
+      requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
+    }
+
     function setupSliderNavigation() {
       const sliders = [
         { prev: '.definition-prev', next: '.definition-next', type: 'definition' },
         { prev: '.translation-prev', next: '.translation-next', type: 'translation' }
       ];
 
+      function navigate(type, prevSelector, nextSelector, direction) {
+        const pages = type === 'definition' ? definitionPages : translationPages;
+        const currentPage = type === 'definition' ? currentDefinitionPage : currentTranslationPage;
+        const targetPage = currentPage + direction;
+        if (targetPage < 0 || targetPage >= pages.length) return;
+
+        if (type === 'definition') currentDefinitionPage = targetPage;
+        else currentTranslationPage = targetPage;
+
+        const slider = tooltip.querySelector(`.${type}-slider`);
+        const info = tooltip.querySelector(`.${type}-info`);
+        const prevBtn = tooltip.querySelector(prevSelector);
+        const nextBtn = tooltip.querySelector(nextSelector);
+
+        updateSlider(slider, info, prevBtn, nextBtn, targetPage, pages.length, type);
+      }
+
       sliders.forEach(({ prev, next, type }) => {
-        tooltip.querySelector(prev).addEventListener('click', () => {
-          const currentPage = type === 'definition' ? currentDefinitionPage : currentTranslationPage;
-          const pages = type === 'definition' ? definitionPages : translationPages;
-
-          if (currentPage <= 0) return;
-
-          if (type === 'definition') currentDefinitionPage--;
-          else currentTranslationPage--;
-
-          const slider = tooltip.querySelector(`.${type}-slider`);
-          const info = tooltip.querySelector(`.${type}-info`);
-          const prevBtn = tooltip.querySelector(prev);
-          const nextBtn = tooltip.querySelector(next);
-
-          updateSlider(slider, info, prevBtn, nextBtn,
-            type === 'definition' ? currentDefinitionPage : currentTranslationPage,
-            pages.length, type);
-        });
-
-        tooltip.querySelector(next).addEventListener('click', () => {
-          const currentPage = type === 'definition' ? currentDefinitionPage : currentTranslationPage;
-          const pages = type === 'definition' ? definitionPages : translationPages;
-
-          if (currentPage >= pages.length - 1) return;
-
-          if (type === 'definition') currentDefinitionPage++;
-          else currentTranslationPage++;
-
-          const slider = tooltip.querySelector(`.${type}-slider`);
-          const info = tooltip.querySelector(`.${type}-info`);
-          const prevBtn = tooltip.querySelector(prev);
-          const nextBtn = tooltip.querySelector(next);
-
-          updateSlider(slider, info, prevBtn, nextBtn,
-            type === 'definition' ? currentDefinitionPage : currentTranslationPage,
-            pages.length, type);
-        });
+        tooltip.querySelector(prev).addEventListener('click', () => navigate(type, prev, next, -1));
+        tooltip.querySelector(next).addEventListener('click', () => navigate(type, prev, next, 1));
       });
     }
 
     setupSliderNavigation();
     setupPronunciationButton();
 
-    // Main trigger click handler
     triggerIcon.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!currentSelection) return;
@@ -1028,85 +1069,90 @@
         ? currentSelection.substring(0, 47) + '...'
         : currentSelection;
       updateTranslationTitle();
+      updateSectionVisibility();
 
       const defSlider = getCachedSelector('defSlider', '.definition-slider');
       const transSlider = getCachedSelector('transSlider', '.translation-slider');
 
-      // Set loading states
-      [defSlider, transSlider].forEach(slider => {
-        if (slider) {
-          slider.textContent = '';
-          slider.appendChild(createContentPage('Loading...'));
-        }
-      });
+      // Set loading states (only for sections the user has enabled)
+      if (settings.enableDefinitions && defSlider) {
+        defSlider.textContent = '';
+        defSlider.appendChild(createContentPage('Loading...'));
+      }
+      if (settings.enableTranslations && transSlider) {
+        transSlider.textContent = '';
+        transSlider.appendChild(createContentPage('Loading...'));
+      }
 
       renderSynAnt([], []);
       updatePronunciation('');
       positionTooltipNearRect(selectionRect);
       showTooltipUI();
 
-      // Set initial loading heights
-      const defContainer = getCachedSelector('defContainer', '.definition-section .content-container');
-      const transContainer = getCachedSelector('transContainer', '.translation-section .content-container');
-      if (defContainer) smoothHeightTransition(defContainer, 60, true);
-      if (transContainer) smoothHeightTransition(transContainer, 80, true);
-
-      // Fetch definitions
-      try {
-        const defResponse = await sendMessage({
-          type: MESSAGE_TYPES.GET_DEFINITION,
-          word: currentSelection
-        });
-
-        if (defResponse.success) {
-          renderDefinitionPages(defResponse.data.defs);
-          renderSynAnt(defResponse.data.synonyms, defResponse.data.antonyms);
-          updatePronunciation(defResponse.data.audio);
-        } else {
-          defSlider.textContent = '';
-          if (defResponse.error === ERROR_MESSAGES.SOURCE_NOT_ENGLISH) {
-            const infoPage = createElement('div', 'content-page');
-            infoPage.appendChild(createElement('div', 'definition-content info',
-              'Definitions are only available for English words. Please select English as the source language.'));
-            defSlider.appendChild(infoPage);
-          } else {
-            defSlider.appendChild(createContentPage(defResponse.error, true));
-          }
-          renderSynAnt([], []);
-        }
-
-        // Reposition tooltip after content is loaded
-        requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
-      } catch (err) {
-        defSlider.textContent = '';
-        defSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
-        renderSynAnt([], []);
+      if (settings.enableDefinitions) {
+        const defContainer = getCachedSelector('defContainer', '.definition-section .content-container');
+        if (defContainer) smoothHeightTransition(defContainer, 60, true);
+      }
+      if (settings.enableTranslations) {
+        const transContainer = getCachedSelector('transContainer', '.translation-section .content-container');
+        if (transContainer) smoothHeightTransition(transContainer, 80, true);
       }
 
-      // Fetch translations
-      try {
-        const transResponse = await sendMessage({
-          type: MESSAGE_TYPES.GET_TRANSLATION,
-          text: currentSelection
-        });
+      if (settings.enableDefinitions) {
+        try {
+          const defResponse = await sendMessage({
+            type: MESSAGE_TYPES.GET_DEFINITION,
+            word: currentSelection
+          });
 
-        if (transResponse.success) {
-          renderTranslationPages(transResponse.data.translations);
-        } else {
-          transSlider.textContent = '';
-          transSlider.appendChild(createContentPage(transResponse.error, true));
+          if (defResponse.success) {
+            renderDefinitionPages(defResponse.data.defs);
+            renderSynAnt(defResponse.data.synonyms, defResponse.data.antonyms);
+            updatePronunciation(defResponse.data.audio);
+          } else {
+            defSlider.textContent = '';
+            if (defResponse.error === ERROR_MESSAGES.SOURCE_NOT_ENGLISH) {
+              const infoPage = createElement('div', 'content-page');
+              infoPage.appendChild(createElement('div', 'definition-content info',
+                'Definitions are only available for English words. Please select English as the source language.'));
+              defSlider.appendChild(infoPage);
+            } else {
+              defSlider.appendChild(createContentPage(defResponse.error, true));
+            }
+            renderSynAnt([], []);
+          }
+
+          repositionAfterRender();
+        } catch (err) {
+          defSlider.textContent = '';
+          defSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
+          renderSynAnt([], []);
         }
+      }
 
-        // Reposition tooltip after content is loaded
-        requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
-      } catch (err) {
-        transSlider.textContent = '';
-        transSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
-        requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
+      if (settings.enableTranslations) {
+        try {
+          const transResponse = await sendMessage({
+            type: MESSAGE_TYPES.GET_TRANSLATION,
+            text: currentSelection
+          });
+
+          if (transResponse.success) {
+            renderTranslationPages(transResponse.data.translations);
+          } else {
+            transSlider.textContent = '';
+            transSlider.appendChild(createContentPage(transResponse.error, true));
+          }
+
+          repositionAfterRender();
+        } catch (err) {
+          transSlider.textContent = '';
+          transSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
+          repositionAfterRender();
+        }
       }
     });
 
-    // Event delegation and cleanup
     [tooltip, triggerIcon].forEach(el => {
       el.addEventListener('mousedown', e => e.stopPropagation());
       el.addEventListener('click', e => e.stopPropagation());
@@ -1117,22 +1163,11 @@
       if (path.includes(tooltip) || path.includes(triggerIcon)) return;
 
       hideTooltip();
-
-      const active = document.activeElement;
-
-      const hasInputSel =
-      active &&
-      isTextInputElement(active) &&
-      typeof active.selectionStart === 'number' &&
-      active.selectionStart !== active.selectionEnd;
-
-      const sel = window.getSelection();
-
-      if (!hasInputSel && (!sel || sel.isCollapsed)) {
-        hideTrigger();
-      }
-
-
+      // Use the unified check (covers both window.getSelection() and native
+      // input/textarea selections) - a raw window.getSelection() check here would
+      // immediately hide the trigger after every in-field selection, since form
+      // field selections never register there.
+      if (!getSelectionInfo()) hideTrigger();
     }, true);
 
     // Load settings, then apply dark mode immediately to avoid a flash of the wrong theme

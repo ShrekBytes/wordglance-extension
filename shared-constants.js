@@ -3,25 +3,30 @@
   Common constants used across background, content, and popup scripts
 */
 
-// Storage keys for browser.storage.local
 const STORAGE_KEYS = {
   TARGET_LANGUAGE: 'wordglance-target-language',
   SOURCE_LANGUAGE: 'wordglance-source-language',
   DARK_MODE: 'wordglance-dark-mode',
   DISABLED_SITES: 'wordglance-disabled-sites',
   CACHE_DEFINITIONS: 'wordglance-cache-definitions',
-  CACHE_TRANSLATIONS: 'wordglance-cache-translations'
+  CACHE_TRANSLATIONS: 'wordglance-cache-translations',
+  FORM_FIELDS_ENABLED: 'wordglance-form-fields-enabled',
+  TRIGGER_POSITION: 'wordglance-trigger-position',
+  ENABLE_DEFINITIONS: 'wordglance-enable-definitions',
+  ENABLE_TRANSLATIONS: 'wordglance-enable-translations'
 };
 
-// Default values for settings
 const DEFAULT_VALUES = {
   TARGET_LANGUAGE: 'en',
   SOURCE_LANGUAGE: 'auto',
   DARK_MODE: false,
-  DISABLED_SITES: []
+  DISABLED_SITES: [],
+  FORM_FIELDS_ENABLED: true,
+  TRIGGER_POSITION: 'top', // 'top' | 'bottom'
+  ENABLE_DEFINITIONS: true,
+  ENABLE_TRANSLATIONS: true
 };
 
-// Message types for runtime communication
 const MESSAGE_TYPES = {
   GET_DEFINITION: 'GET_DEFINITION',
   GET_TRANSLATION: 'GET_TRANSLATION',
@@ -30,7 +35,6 @@ const MESSAGE_TYPES = {
   CLEAR_TRANSLATION_CACHE: 'CLEAR_TRANSLATION_CACHE'
 };
 
-// Supported languages for translation and UI
 const LANGUAGES = {
   'auto': 'Auto-detect', 'en': 'English', 'bn': 'Bengali', 'es': 'Spanish',
   'fr': 'French', 'de': 'German', 'it': 'Italian', 'pt': 'Portuguese',
@@ -45,7 +49,6 @@ const LANGUAGES = {
   'sw': 'Swahili', 'am': 'Amharic', 'zu': 'Zulu'
 };
 
-// Error messages
 const ERROR_MESSAGES = {
   NO_DEFINITION: 'Definition not found',
   NETWORK_ERROR: 'Connection error - please try again',

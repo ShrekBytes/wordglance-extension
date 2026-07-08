@@ -14,7 +14,7 @@
           <div class="setting-item">
             <div class="setting-label">Dark Mode</div>
             <label class="toggle-switch">
-              <input type="checkbox" id="dark-mode">
+              <input type="checkbox" id="dark-mode" aria-label="Dark Mode">
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -49,9 +49,47 @@
               <div class="setting-tip" id="site-hostname">This page</div>
             </div>
             <label class="toggle-switch">
-              <input type="checkbox" id="site-toggle">
+              <input type="checkbox" id="site-toggle" aria-label="Enable on This Site">
               <span class="toggle-slider"></span>
             </label>
+          </div>
+        </div>
+        <div class="setting-section">
+          <div class="setting-item">
+            <div class="setting-label">Show Definitions</div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="enable-definitions" aria-label="Show Definitions">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">Show Translations</div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="enable-translations" aria-label="Show Translations">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="setting-section">
+          <div class="setting-item">
+            <div class="setting-label">
+              <div>Look Up in Text Fields</div>
+              <div class="setting-tip">Show the button when selecting text in input boxes and text areas</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="form-fields-toggle" aria-label="Look Up in Text Fields">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <div>Button Position</div>
+              <div class="setting-tip">Useful if a site's own toolbar covers the button</div>
+            </div>
+            <div class="segmented-control" id="trigger-position-control" role="group" aria-label="Button Position">
+              <button type="button" class="segmented-option" data-value="top" aria-pressed="true">Top</button>
+              <button type="button" class="segmented-option" data-value="bottom" aria-pressed="false">Bottom</button>
+            </div>
           </div>
         </div>
         <div class="setting-section">

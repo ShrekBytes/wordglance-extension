@@ -3,11 +3,14 @@
   Handles API calls, cache management, settings, and message routing
 */
 
-// State management
 const settings = {
   targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
   sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
-  darkMode: DEFAULT_VALUES.DARK_MODE
+  darkMode: DEFAULT_VALUES.DARK_MODE,
+  formFieldsEnabled: DEFAULT_VALUES.FORM_FIELDS_ENABLED,
+  triggerPosition: DEFAULT_VALUES.TRIGGER_POSITION,
+  enableDefinitions: DEFAULT_VALUES.ENABLE_DEFINITIONS,
+  enableTranslations: DEFAULT_VALUES.ENABLE_TRANSLATIONS
 };
 
 const caches = {
@@ -15,25 +18,39 @@ const caches = {
   translations: new LRUCache(CONFIG.cacheSize)
 };
 
-// Settings management with proper boolean handling
 async function loadSettings() {
   const stored = await StorageUtils.get([
     STORAGE_KEYS.TARGET_LANGUAGE,
     STORAGE_KEYS.SOURCE_LANGUAGE,
-    STORAGE_KEYS.DARK_MODE
+    STORAGE_KEYS.DARK_MODE,
+    STORAGE_KEYS.FORM_FIELDS_ENABLED,
+    STORAGE_KEYS.TRIGGER_POSITION,
+    STORAGE_KEYS.ENABLE_DEFINITIONS,
+    STORAGE_KEYS.ENABLE_TRANSLATIONS
   ]);
 
   // Use getValue (not ||) so an explicitly stored false/0 isn't overridden by the default
   settings.targetLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE);
   settings.sourceLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE);
   settings.darkMode = StorageUtils.getValue(stored, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE);
+  settings.formFieldsEnabled = StorageUtils.getValue(stored, STORAGE_KEYS.FORM_FIELDS_ENABLED, DEFAULT_VALUES.FORM_FIELDS_ENABLED);
+  settings.triggerPosition = StorageUtils.getValue(stored, STORAGE_KEYS.TRIGGER_POSITION, DEFAULT_VALUES.TRIGGER_POSITION);
+  settings.enableDefinitions = StorageUtils.getValue(stored, STORAGE_KEYS.ENABLE_DEFINITIONS, DEFAULT_VALUES.ENABLE_DEFINITIONS);
+  settings.enableTranslations = StorageUtils.getValue(stored, STORAGE_KEYS.ENABLE_TRANSLATIONS, DEFAULT_VALUES.ENABLE_TRANSLATIONS);
+
+  // At least one of definitions/translations must stay enabled - the popup UI
+  // already enforces this, but guard here too in case of a stale or externally
+  // edited stored state (e.g. synced from an older version of the extension).
+  if (!settings.enableDefinitions && !settings.enableTranslations) {
+    settings.enableTranslations = true;
+    await StorageUtils.set({ [STORAGE_KEYS.ENABLE_TRANSLATIONS]: true });
+  }
 }
 
 const settingsReady = loadSettings().catch(e => {
   console.warn('Settings load error:', e);
 });
 
-// Cache management with debounced saving
 async function loadCaches() {
   try {
     const [defCache, transCache] = await Promise.all([
@@ -78,7 +95,6 @@ async function clearAllCaches() {
   });
 }
 
-// API functions
 async function fetchDefinition(word) {
   const key = TextUtils.sanitize(word)?.toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
@@ -229,7 +245,6 @@ async function fetchTranslation(text) {
   }
 }
 
-// Message handling
 browser.runtime.onMessage.addListener(async (msg) => {
   try {
     await settingsReady;
@@ -241,7 +256,11 @@ browser.runtime.onMessage.addListener(async (msg) => {
           data: {
             targetLanguage: settings.targetLanguage,
             sourceLanguage: settings.sourceLanguage,
-            darkMode: settings.darkMode
+            darkMode: settings.darkMode,
+            formFieldsEnabled: settings.formFieldsEnabled,
+            triggerPosition: settings.triggerPosition,
+            enableDefinitions: settings.enableDefinitions,
+            enableTranslations: settings.enableTranslations
           }
         };
 
@@ -283,7 +302,6 @@ browser.runtime.onMessage.addListener(async (msg) => {
   }
 });
 
-// Storage change listener with proper boolean handling
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
 
@@ -298,6 +316,22 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes[STORAGE_KEYS.DARK_MODE]) {
     // Nullish coalescing (not ||) so an explicit `false` isn't replaced by the default
     settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
+  }
+
+  if (changes[STORAGE_KEYS.FORM_FIELDS_ENABLED]) {
+    settings.formFieldsEnabled = changes[STORAGE_KEYS.FORM_FIELDS_ENABLED].newValue ?? DEFAULT_VALUES.FORM_FIELDS_ENABLED;
+  }
+
+  if (changes[STORAGE_KEYS.TRIGGER_POSITION]) {
+    settings.triggerPosition = changes[STORAGE_KEYS.TRIGGER_POSITION].newValue ?? DEFAULT_VALUES.TRIGGER_POSITION;
+  }
+
+  if (changes[STORAGE_KEYS.ENABLE_DEFINITIONS]) {
+    settings.enableDefinitions = changes[STORAGE_KEYS.ENABLE_DEFINITIONS].newValue ?? DEFAULT_VALUES.ENABLE_DEFINITIONS;
+  }
+
+  if (changes[STORAGE_KEYS.ENABLE_TRANSLATIONS]) {
+    settings.enableTranslations = changes[STORAGE_KEYS.ENABLE_TRANSLATIONS].newValue ?? DEFAULT_VALUES.ENABLE_TRANSLATIONS;
   }
 });
 

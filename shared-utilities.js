@@ -3,7 +3,6 @@
   Common utility functions and configuration used across all scripts
 */
 
-// Shared configuration
 const CONFIG = {
   tooltipZIndex: 999999,
   maxDefinitions: 9,
@@ -12,13 +11,14 @@ const CONFIG = {
   translationsPerPage: 4,
   maxSynonyms: 6,
   maxAntonyms: 6,
+  maxSelectionLength: 100,
+  maxMirrorFieldLength: 20000,
   cacheSize: 500,
   apiTimeout: 10000,
   debounceDelay: 100,
   cacheSaveDelay: 2000 // Debounce cache saving
 };
 
-// Storage utilities with proper boolean handling
 const StorageUtils = {
   async get(keys) {
     try {
@@ -72,7 +72,6 @@ const SiteUtils = {
   }
 };
 
-// Text sanitization utility
 const TextUtils = {
   sanitize(text) {
     if (!text || typeof text !== 'string') return '';
@@ -81,7 +80,7 @@ const TextUtils = {
     const cleaned = text.trim().replace(/[\x00-\x1F\x7F-\x9F<>'"&]/g, '');
 
     // Length validation
-    if (cleaned.length === 0 || cleaned.length > 100) return '';
+    if (cleaned.length === 0 || cleaned.length > CONFIG.maxSelectionLength) return '';
 
     // Word count validation
     const words = cleaned.split(/\s+/).filter(Boolean);
@@ -102,7 +101,6 @@ const TextUtils = {
   }
 };
 
-// Debounce utility
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -111,7 +109,6 @@ function debounce(func, wait) {
   };
 }
 
-// LRU cache management
 class LRUCache {
   constructor(maxSize = CONFIG.cacheSize) {
     this.cache = new Map();
@@ -144,10 +141,6 @@ class LRUCache {
     }
   }
 
-  has(key) {
-    return this.cache.has(key);
-  }
-
   clear() {
     this.cache.clear();
   }
@@ -159,13 +152,8 @@ class LRUCache {
   fromObject(obj) {
     Object.entries(obj).forEach(([k, v]) => this.set(k, v));
   }
-
-  get size() {
-    return this.cache.size;
-  }
 }
 
-// Fetch with timeout utility
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CONFIG.apiTimeout);
@@ -183,7 +171,6 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-// Message sending utility with error handling
 async function sendMessage(message) {
   try {
     const response = await browser.runtime.sendMessage(message);

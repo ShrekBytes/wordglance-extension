@@ -40,21 +40,17 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
     label: document.querySelector(`#${prefix}-language-text`)
   };
 
-  // Initialize
   elements.label.textContent = getLanguageName(currentCode);
   renderLanguageOptions(elements.options, isSource);
 
-  // Mark selected option
   elements.options.querySelectorAll('.language-option').forEach(opt => {
     opt.classList.toggle('selected', opt.dataset.code === currentCode);
   });
 
-  // Selector click handler
   elements.selector.addEventListener('click', (e) => {
     if (!elements.dropdown.contains(e.target)) {
       e.stopPropagation();
 
-      // Close other dropdown
       const otherPrefix = prefix === 'source' ? 'target' : 'source';
       closeDropdown(otherPrefix);
 
@@ -68,7 +64,6 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
   // Prevent dropdown closing on internal clicks
   elements.dropdown.addEventListener('click', e => e.stopPropagation());
 
-  // Search filtering
   elements.search.addEventListener('input', () => {
     const query = elements.search.value.toLowerCase();
     elements.options.querySelectorAll('.language-option').forEach(opt => {
@@ -78,27 +73,25 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
     });
   });
 
-  // Search escape key
   elements.search.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeDropdown(prefix);
     }
   });
 
-  // Option selection
   elements.options.addEventListener('click', async (e) => {
     const option = e.target.closest('.language-option');
     if (!option) return;
 
     const newCode = option.dataset.code;
 
-    // Update selection (always update, even if same language is selected)
+    // Re-apply selection and persist unconditionally, even if the same language
+    // was clicked again, so the UI can never drift from what's actually stored
     elements.options.querySelectorAll('.language-option.selected')
       .forEach(opt => opt.classList.remove('selected'));
     option.classList.add('selected');
     elements.label.textContent = getLanguageName(newCode);
 
-    // Always call onChange to ensure the setting is properly saved
     await onChange(newCode);
 
     closeDropdown(prefix);
@@ -122,7 +115,6 @@ async function clearCache() {
 
   if (!confirmed) return;
 
-  // Use background script to clear cache
   await sendMessage({ type: MESSAGE_TYPES.CLEAR_CACHE });
 }
 
@@ -138,6 +130,20 @@ async function getActiveTabHostname() {
     console.warn('Failed to read active tab:', e);
     return null;
   }
+}
+
+// Wires up a toggle whose partner must not also be off: unchecking this one while
+// the partner is already unchecked forces the partner back on instead of leaving
+// both disabled.
+function setupExclusiveToggle(toggle, partnerToggle, storageKey, partnerStorageKey) {
+  toggle.addEventListener('change', async () => {
+    const checked = toggle.checked;
+    if (!checked && !partnerToggle.checked) {
+      partnerToggle.checked = true;
+      await StorageUtils.set({ [partnerStorageKey]: true });
+    }
+    await StorageUtils.set({ [storageKey]: checked });
+  });
 }
 
 async function setupSiteToggle() {
@@ -162,35 +168,51 @@ async function setupSiteToggle() {
 async function init() {
   const elements = {
     darkToggle: document.getElementById('dark-mode'),
-    clearBtn: document.getElementById('clear-cache-btn')
+    clearBtn: document.getElementById('clear-cache-btn'),
+    enableDefinitions: document.getElementById('enable-definitions'),
+    enableTranslations: document.getElementById('enable-translations'),
+    formFieldsToggle: document.getElementById('form-fields-toggle'),
+    positionOptions: document.querySelectorAll('#trigger-position-control .segmented-option')
   };
 
   // Load current settings (getValue, not the raw object, so a stored `false` isn't lost)
   const store = await StorageUtils.get([
     STORAGE_KEYS.DARK_MODE,
     STORAGE_KEYS.SOURCE_LANGUAGE,
-    STORAGE_KEYS.TARGET_LANGUAGE
+    STORAGE_KEYS.TARGET_LANGUAGE,
+    STORAGE_KEYS.ENABLE_DEFINITIONS,
+    STORAGE_KEYS.ENABLE_TRANSLATIONS,
+    STORAGE_KEYS.FORM_FIELDS_ENABLED,
+    STORAGE_KEYS.TRIGGER_POSITION
   ]);
 
   const settings = {
     darkMode: StorageUtils.getValue(store, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE),
     sourceLanguage: StorageUtils.getValue(store, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE),
-    targetLanguage: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE)
+    targetLanguage: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE),
+    enableDefinitions: StorageUtils.getValue(store, STORAGE_KEYS.ENABLE_DEFINITIONS, DEFAULT_VALUES.ENABLE_DEFINITIONS),
+    enableTranslations: StorageUtils.getValue(store, STORAGE_KEYS.ENABLE_TRANSLATIONS, DEFAULT_VALUES.ENABLE_TRANSLATIONS),
+    formFieldsEnabled: StorageUtils.getValue(store, STORAGE_KEYS.FORM_FIELDS_ENABLED, DEFAULT_VALUES.FORM_FIELDS_ENABLED),
+    triggerPosition: StorageUtils.getValue(store, STORAGE_KEYS.TRIGGER_POSITION, DEFAULT_VALUES.TRIGGER_POSITION)
   };
 
   elements.darkToggle.checked = settings.darkMode;
   toggleDarkMode(settings.darkMode);
 
-  // Setup dark mode toggle
   elements.darkToggle.addEventListener('change', async () => {
     const isDark = elements.darkToggle.checked;
     await StorageUtils.set({ [STORAGE_KEYS.DARK_MODE]: isDark });
     toggleDarkMode(isDark);
   });
 
-  // Setup language selectors
   setupSelector('source', true, settings.sourceLanguage, async (code) => {
+    const previousLanguage = settings.sourceLanguage;
     await StorageUtils.set({ [STORAGE_KEYS.SOURCE_LANGUAGE]: code });
+
+    if (code !== previousLanguage) {
+      await sendMessage({ type: MESSAGE_TYPES.CLEAR_TRANSLATION_CACHE });
+    }
+
     settings.sourceLanguage = code;
   });
 
@@ -206,13 +228,41 @@ async function init() {
     settings.targetLanguage = code;
   });
 
-  // Setup cache management
   elements.clearBtn.addEventListener('click', clearCache);
 
-  // Setup per-site enable/disable toggle
+  // Definitions and translations toggles: disabling both would leave nothing to
+  // look up, so turning one off while the other is already off re-enables the other.
+  elements.enableDefinitions.checked = settings.enableDefinitions;
+  elements.enableTranslations.checked = settings.enableTranslations;
+
+  setupExclusiveToggle(elements.enableDefinitions, elements.enableTranslations,
+    STORAGE_KEYS.ENABLE_DEFINITIONS, STORAGE_KEYS.ENABLE_TRANSLATIONS);
+  setupExclusiveToggle(elements.enableTranslations, elements.enableDefinitions,
+    STORAGE_KEYS.ENABLE_TRANSLATIONS, STORAGE_KEYS.ENABLE_DEFINITIONS);
+
+  elements.formFieldsToggle.checked = settings.formFieldsEnabled;
+  elements.formFieldsToggle.addEventListener('change', async () => {
+    await StorageUtils.set({ [STORAGE_KEYS.FORM_FIELDS_ENABLED]: elements.formFieldsToggle.checked });
+  });
+
+  elements.positionOptions.forEach(option => {
+    const isSelected = option.dataset.value === settings.triggerPosition;
+    option.classList.toggle('selected', isSelected);
+    option.setAttribute('aria-pressed', String(isSelected));
+
+    option.addEventListener('click', async () => {
+      const value = option.dataset.value;
+      elements.positionOptions.forEach(o => {
+        const selected = o === option;
+        o.classList.toggle('selected', selected);
+        o.setAttribute('aria-pressed', String(selected));
+      });
+      await StorageUtils.set({ [STORAGE_KEYS.TRIGGER_POSITION]: value });
+    });
+  });
+
   await setupSiteToggle();
 
-  // Global click handler to close dropdowns
   document.addEventListener('click', () => {
     ['source', 'target'].forEach(closeDropdown);
   });

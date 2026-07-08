@@ -38,6 +38,17 @@ body.dark-page { background:#1a1a1a; }
 .cache-button { background:#e74c3c; color:#fff; border:none; border-radius:4px; padding:6px 12px; cursor:pointer; font-size:12px; transition:background .2s ease; }
 .cache-button:hover { background:#c0392b; }
 
+.segmented-control { display:flex; border:1px solid #e2e8f0; border-radius:4px; overflow:hidden; }
+.segmented-option { flex:1; padding:5px 12px; font-size:12px; border:none; background:#f7fafc; color:#2c3e50; cursor:pointer; transition:background .2s ease, color .2s ease; }
+.segmented-option + .segmented-option { border-left:1px solid #e2e8f0; }
+.segmented-option:hover:not(.selected) { background:#ecf0f1; }
+.segmented-option.selected { background:#3498db; color:#fff; }
+.wordglance-settings.dark-mode .segmented-control { border-color:#666; }
+.wordglance-settings.dark-mode .segmented-option { background:#333; color:#e0e0e0; }
+.wordglance-settings.dark-mode .segmented-option + .segmented-option { border-left-color:#666; }
+.wordglance-settings.dark-mode .segmented-option:hover:not(.selected) { background:#444; }
+.wordglance-settings.dark-mode .segmented-option.selected { background:#3498db; color:#fff; }
+
 .credit-section { border-top:1px solid #e0e0e0; padding-top:20px; margin-top:15px; text-align:center; }
 .wordglance-settings.dark-mode .credit-section { border-top-color:#444; }
 .help-link { display:block; margin-bottom:12px; color:#3498db; text-decoration:none; font-size:14px; }

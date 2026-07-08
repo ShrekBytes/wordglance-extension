@@ -39,8 +39,7 @@
       settingsLoaded = true;
     }
 
-    // Resets tooltip UI and pagination state; called whenever a settings change
-    // invalidates whatever selection/tooltip is currently showing
+    // Resets tooltip UI/pagination state; called after a settings change invalidates the current selection
     function resetTooltipState() {
       hideTooltip();
       hideTrigger();
@@ -80,8 +79,7 @@
 
       if (changes[STORAGE_KEYS.FORM_FIELDS_ENABLED]) {
         settings.formFieldsEnabled = changes[STORAGE_KEYS.FORM_FIELDS_ENABLED].newValue ?? DEFAULT_VALUES.FORM_FIELDS_ENABLED;
-        // A form-field selection may currently be showing the trigger/tooltip -
-        // re-evaluate immediately rather than waiting for the next selection event
+        // Re-evaluate immediately in case a form-field selection is currently showing
         resetTooltipState();
       }
 
@@ -377,10 +375,8 @@
 
     // Selection handling
 
-    // Native <input>/<textarea> selections live in el.selectionStart/selectionEnd and are
-    // completely invisible to window.getSelection(), so they need their own detection path.
-    // Only these input types support selection per the HTML spec (email, number, date, etc.
-    // do not, and throw InvalidStateError if you try to set selectionStart/selectionEnd on them).
+    // window.getSelection() doesn't see selections inside <input>/<textarea>, so they
+    // need their own path. Only these types support selection per the HTML spec.
     function isTextInputElement(el) {
       if (!el) return false;
       if (el.tagName === 'TEXTAREA') return true;
@@ -391,9 +387,7 @@
       return false;
     }
 
-    // Builds a hidden clone of the field's text (same font/padding/wrapping) so we can
-    // measure where the selected substring actually lands on screen, then maps that back
-    // to viewport coordinates - accounting for the field's own scroll position.
+    // Measures where the selected substring would land using a hidden clone of the field's text
     function getFormFieldSelectionRect(el, start, end) {
       const style = window.getComputedStyle(el);
       const mirror = document.createElement('div');
@@ -407,11 +401,8 @@
       ];
       copiedProps.forEach(p => { mirror.style[p] = style[p]; });
 
-      // A visible scrollbar eats into the field's content width without changing any
-      // box-model property, so clientWidth can be narrower than the computed 'width'
-      // implies. The mirror never has a scrollbar, so without this it can wrap text
-      // slightly later than the real field does, throwing off the measured position
-      // on wrapped lines.
+      // A scrollbar narrows the field's content width without changing any box-model
+      // property; the mirror has none, so compensate or it wraps text too late.
       const borderX = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
       const scrollbarWidth = el.offsetWidth - el.clientWidth - borderX;
       if (scrollbarWidth > 0.5) {
@@ -444,8 +435,7 @@
         mirrorRect = mirror.getBoundingClientRect();
         spanRect = selected.getBoundingClientRect();
       } finally {
-        // Guarantee cleanup even if a measurement above throws, so a hostile or
-        // buggy page can't cause the mirror to leak in the DOM permanently
+        // Guarantee cleanup even if a measurement above throws
         document.body.removeChild(mirror);
       }
 
@@ -479,15 +469,12 @@
         start = el.selectionStart;
         end = el.selectionEnd;
       } catch (e) {
-        // Some browsers have thrown InvalidStateError even on read for input types
-        // that don't support selection; treat that the same as "nothing selected"
+        // A few browser versions throw on read too for unsupported input types
         return null;
       }
       if (start == null || end == null || start === end) return null;
 
-      // The mirror below clones the field's entire value, not just the selection,
-      // so skip pathologically large fields rather than force a full layout/reflow
-      // of tens of thousands of characters on every selection change.
+      // Mirror clones the whole value, so cap it to avoid reflowing huge fields
       if (el.value.length > CONFIG.maxMirrorFieldLength) return null;
 
       const text = el.value.substring(start, end).trim();
@@ -507,8 +494,7 @@
       // Nothing to look up if the user has turned off both features
       if (!settings.enableDefinitions && !settings.enableTranslations) return null;
 
-      // Check native input/textarea fields first: they hold their own selection state
-      // independently of window.getSelection(), so a focused field takes priority.
+      // Form fields take priority - they hold their own selection, invisible to window.getSelection()
       const formInfo = getFormFieldSelectionInfo();
       if (formInfo) return formInfo;
 
@@ -529,10 +515,8 @@
       }
     }
 
-    // Positions the trigger relative to the selection rect. settings.triggerPosition
-    // picks which side is preferred (useful when a site's own toolbar sits right above
-    // a selection and would otherwise hide the button); each side falls back to the
-    // other if there isn't room on screen.
+    // settings.triggerPosition picks the preferred side (above/below); falls back
+    // to the other side if there's no room on screen.
     function positionTriggerIcon(rect) {
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
         ('ontouchstart' in window) ||
@@ -554,8 +538,7 @@
           : top < 10;
 
         if (outOfBounds) {
-          // No room on the preferred side - fall back to the original mobile
-          // behavior of tucking the button beside the selection instead
+          // No room on the preferred side - tuck the button beside the selection instead
           left = Math.min(cx + 20, window.innerWidth - buttonSize - 10);
           top = Math.max(10, rect.top - halfButton);
           if (left + buttonSize > window.innerWidth - 10) left = Math.max(10, cx - buttonSize - 20);
@@ -667,9 +650,7 @@
       }
     };
 
-    // Capture phase, not bubble: scroll events on a nested scrollable element (like a
-    // tall textarea) don't bubble, so a plain bubble-phase listener here would miss
-    // them and let the trigger drift away from the selection as the field scrolls.
+    // Capture phase: scroll events on a nested element (e.g. a tall textarea) don't bubble
     window.addEventListener('scroll', updateSelectionRect, { passive: true, capture: true });
     window.addEventListener('resize', updateSelectionRect);
 
@@ -690,10 +671,8 @@
       }
     }
 
-    // Synonyms/antonyms are sourced from the definitions lookup but live in their
-    // own top-level section (a sibling of .definition-section, not nested inside
-    // it), so hiding .definition-section alone doesn't hide them - they need the
-    // same enableDefinitions check applied explicitly.
+    // Synonyms/antonyms live in their own section (a sibling of .definition-section,
+    // not nested inside it), so they need the enableDefinitions check applied separately.
     function updateSectionVisibility() {
       const defSection = tooltip.querySelector('.definition-section');
       const transSection = tooltip.querySelector('.translation-section');
@@ -912,9 +891,8 @@
       const tooltipWidth = tRect.width || 320; // fallback for initial positioning
       const tooltipHeight = tRect.height || 200; // fallback for initial positioning
 
-      // Candidate positions, tried in order until one fits the viewport; the four
-      // corner variants exist because the centered above/below versions can run
-      // off the left or right edge for selections near the screen's sides
+      // Candidate positions, tried in order; corner variants exist because centered
+      // above/below can run off the left or right edge near the screen's sides
       const positions = [
         {
           name: 'above',
@@ -977,8 +955,7 @@
         }
       }
 
-      // No position fit perfectly - fall back to the preferred spot (above) and
-      // clamp it into the viewport instead
+      // No position fit perfectly - use the preferred spot and clamp into the viewport
       if (!bestPosition) {
         bestPosition = positions[0]; // Default to above
 
@@ -1022,9 +999,7 @@
       }
     }
 
-    // Repositioning must wait two frames: one for the DOM update to be reflected
-    // in layout, and one more for the content-height CSS transition to actually start,
-    // so the tooltip's final size is known before we recompute its position.
+    // Waits two frames so the tooltip's post-transition size is known before repositioning
     function repositionAfterRender() {
       requestAnimationFrame(() => requestAnimationFrame(() => repositionTooltip()));
     }
@@ -1163,10 +1138,8 @@
       if (path.includes(tooltip) || path.includes(triggerIcon)) return;
 
       hideTooltip();
-      // Use the unified check (covers both window.getSelection() and native
-      // input/textarea selections) - a raw window.getSelection() check here would
-      // immediately hide the trigger after every in-field selection, since form
-      // field selections never register there.
+      // Unified check - a raw window.getSelection() check would hide the trigger
+      // after every in-field selection, since form fields never register there
       if (!getSelectionInfo()) hideTrigger();
     }, true);
 

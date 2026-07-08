@@ -38,9 +38,7 @@ async function loadSettings() {
   settings.enableDefinitions = StorageUtils.getValue(stored, STORAGE_KEYS.ENABLE_DEFINITIONS, DEFAULT_VALUES.ENABLE_DEFINITIONS);
   settings.enableTranslations = StorageUtils.getValue(stored, STORAGE_KEYS.ENABLE_TRANSLATIONS, DEFAULT_VALUES.ENABLE_TRANSLATIONS);
 
-  // At least one of definitions/translations must stay enabled - the popup UI
-  // already enforces this, but guard here too in case of a stale or externally
-  // edited stored state (e.g. synced from an older version of the extension).
+  // Guard against both being off, even from a stale or externally edited stored state
   if (!settings.enableDefinitions && !settings.enableTranslations) {
     settings.enableTranslations = true;
     await StorageUtils.set({ [STORAGE_KEYS.ENABLE_TRANSLATIONS]: true });

@@ -85,8 +85,7 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
 
     const newCode = option.dataset.code;
 
-    // Re-apply selection and persist unconditionally, even if the same language
-    // was clicked again, so the UI can never drift from what's actually stored
+    // Re-apply and persist even if the same language was clicked again, so the UI can't drift from storage
     elements.options.querySelectorAll('.language-option.selected')
       .forEach(opt => opt.classList.remove('selected'));
     option.classList.add('selected');
@@ -132,9 +131,7 @@ async function getActiveTabHostname() {
   }
 }
 
-// Wires up a toggle whose partner must not also be off: unchecking this one while
-// the partner is already unchecked forces the partner back on instead of leaving
-// both disabled.
+// Unchecking this one while its partner is already unchecked forces the partner back on
 function setupExclusiveToggle(toggle, partnerToggle, storageKey, partnerStorageKey) {
   toggle.addEventListener('change', async () => {
     const checked = toggle.checked;
@@ -230,8 +227,7 @@ async function init() {
 
   elements.clearBtn.addEventListener('click', clearCache);
 
-  // Definitions and translations toggles: disabling both would leave nothing to
-  // look up, so turning one off while the other is already off re-enables the other.
+  // At least one of definitions/translations must stay enabled (see setupExclusiveToggle)
   elements.enableDefinitions.checked = settings.enableDefinitions;
   elements.enableTranslations.checked = settings.enableTranslations;
 

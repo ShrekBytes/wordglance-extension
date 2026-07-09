@@ -22,7 +22,7 @@ const DEFAULT_VALUES = {
   DARK_MODE: false,
   DISABLED_SITES: [],
   FORM_FIELDS_ENABLED: true,
-  TRIGGER_POSITION: 'top', // 'top' | 'bottom'
+  TRIGGER_POSITION: 'bottom', // 'top' | 'bottom'
   ENABLE_DEFINITIONS: true,
   ENABLE_TRANSLATIONS: true
 };

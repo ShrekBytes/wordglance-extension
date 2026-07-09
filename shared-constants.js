@@ -27,6 +27,27 @@ const DEFAULT_VALUES = {
   ENABLE_TRANSLATIONS: true
 };
 
+// Single source of truth for the "settings" shape shared by background.js, content.js,
+// and popup.js: each entry maps the in-memory settings key to its storage key and default.
+// Iterating this (see SettingsUtils in shared-utilities.js) replaces three separate
+// hand-written copies of the same key list.
+const SETTINGS_SCHEMA = {
+  targetLanguage: { storageKey: STORAGE_KEYS.TARGET_LANGUAGE, default: DEFAULT_VALUES.TARGET_LANGUAGE },
+  sourceLanguage: { storageKey: STORAGE_KEYS.SOURCE_LANGUAGE, default: DEFAULT_VALUES.SOURCE_LANGUAGE },
+  darkMode: { storageKey: STORAGE_KEYS.DARK_MODE, default: DEFAULT_VALUES.DARK_MODE },
+  formFieldsEnabled: { storageKey: STORAGE_KEYS.FORM_FIELDS_ENABLED, default: DEFAULT_VALUES.FORM_FIELDS_ENABLED },
+  triggerPosition: { storageKey: STORAGE_KEYS.TRIGGER_POSITION, default: DEFAULT_VALUES.TRIGGER_POSITION },
+  enableDefinitions: { storageKey: STORAGE_KEYS.ENABLE_DEFINITIONS, default: DEFAULT_VALUES.ENABLE_DEFINITIONS },
+  enableTranslations: { storageKey: STORAGE_KEYS.ENABLE_TRANSLATIONS, default: DEFAULT_VALUES.ENABLE_TRANSLATIONS }
+};
+
+// Named so the fetch call sites in background.js stay in sync with the host
+// permissions declared in manifest.json at a glance.
+const API_ENDPOINTS = {
+  DICTIONARY: 'https://api.dictionaryapi.dev/api/v2/entries/en/',
+  TRANSLATION: 'https://translation-1e79fb3f3adb.herokuapp.com/translate'
+};
+
 const MESSAGE_TYPES = {
   GET_DEFINITION: 'GET_DEFINITION',
   GET_TRANSLATION: 'GET_TRANSLATION',
@@ -51,6 +72,7 @@ const LANGUAGES = {
 
 const ERROR_MESSAGES = {
   NO_DEFINITION: 'Definition not found',
+  NO_TRANSLATION: 'Translation not found',
   NETWORK_ERROR: 'Connection error - please try again',
   INVALID_WORD: 'Please select a valid word to look up',
   INVALID_TEXT: 'Please select valid text to translate',

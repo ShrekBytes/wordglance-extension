@@ -3,15 +3,7 @@
   Handles API calls, cache management, settings, and message routing
 */
 
-const settings = {
-  targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
-  sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
-  darkMode: DEFAULT_VALUES.DARK_MODE,
-  formFieldsEnabled: DEFAULT_VALUES.FORM_FIELDS_ENABLED,
-  triggerPosition: DEFAULT_VALUES.TRIGGER_POSITION,
-  enableDefinitions: DEFAULT_VALUES.ENABLE_DEFINITIONS,
-  enableTranslations: DEFAULT_VALUES.ENABLE_TRANSLATIONS
-};
+const settings = SettingsUtils.createDefaults();
 
 const caches = {
   definitions: new LRUCache(CONFIG.cacheSize),
@@ -19,24 +11,7 @@ const caches = {
 };
 
 async function loadSettings() {
-  const stored = await StorageUtils.get([
-    STORAGE_KEYS.TARGET_LANGUAGE,
-    STORAGE_KEYS.SOURCE_LANGUAGE,
-    STORAGE_KEYS.DARK_MODE,
-    STORAGE_KEYS.FORM_FIELDS_ENABLED,
-    STORAGE_KEYS.TRIGGER_POSITION,
-    STORAGE_KEYS.ENABLE_DEFINITIONS,
-    STORAGE_KEYS.ENABLE_TRANSLATIONS
-  ]);
-
-  // Use getValue (not ||) so an explicitly stored false/0 isn't overridden by the default
-  settings.targetLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE);
-  settings.sourceLanguage = StorageUtils.getValue(stored, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE);
-  settings.darkMode = StorageUtils.getValue(stored, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE);
-  settings.formFieldsEnabled = StorageUtils.getValue(stored, STORAGE_KEYS.FORM_FIELDS_ENABLED, DEFAULT_VALUES.FORM_FIELDS_ENABLED);
-  settings.triggerPosition = StorageUtils.getValue(stored, STORAGE_KEYS.TRIGGER_POSITION, DEFAULT_VALUES.TRIGGER_POSITION);
-  settings.enableDefinitions = StorageUtils.getValue(stored, STORAGE_KEYS.ENABLE_DEFINITIONS, DEFAULT_VALUES.ENABLE_DEFINITIONS);
-  settings.enableTranslations = StorageUtils.getValue(stored, STORAGE_KEYS.ENABLE_TRANSLATIONS, DEFAULT_VALUES.ENABLE_TRANSLATIONS);
+  Object.assign(settings, await SettingsUtils.loadFromStorage());
 
   // Guard against both being off, even from a stale or externally edited stored state
   if (!settings.enableDefinitions && !settings.enableTranslations) {
@@ -97,13 +72,17 @@ async function fetchDefinition(word) {
   const key = TextUtils.sanitize(word)?.toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
 
+  // Ensure the persisted cache has actually been loaded into memory before checking it -
+  // otherwise a request arriving right as a suspended background script wakes up could
+  // miss an entry that's already sitting in storage.
+  await cachesReady;
   const cached = caches.definitions.get(key);
   if (cached) return cached;
 
   let res;
   try {
     res = await fetchWithTimeout(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`
+      `${API_ENDPOINTS.DICTIONARY}${encodeURIComponent(key)}`
     );
   } catch (e) {
     // The fetch itself failed - offline, DNS, timed out, etc. This is a genuine connection problem.
@@ -179,6 +158,7 @@ async function fetchTranslation(text) {
   if (!cleanText) throw new Error(ERROR_MESSAGES.INVALID_TEXT);
 
   const key = `${cleanText}::${settings.sourceLanguage}::${settings.targetLanguage}`;
+  await cachesReady;
   const cached = caches.translations.get(key);
   if (cached) return cached;
 
@@ -193,7 +173,7 @@ async function fetchTranslation(text) {
   let res;
   try {
     res = await fetchWithTimeout(
-      `https://translation-1e79fb3f3adb.herokuapp.com/translate?${params}`
+      `${API_ENDPOINTS.TRANSLATION}?${params}`
     );
   } catch (e) {
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
@@ -302,35 +282,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
 
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-
-  if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
-    settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue ?? DEFAULT_VALUES.TARGET_LANGUAGE;
-  }
-
-  if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
-    settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue ?? DEFAULT_VALUES.SOURCE_LANGUAGE;
-  }
-
-  if (changes[STORAGE_KEYS.DARK_MODE]) {
-    // Nullish coalescing (not ||) so an explicit `false` isn't replaced by the default
-    settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
-  }
-
-  if (changes[STORAGE_KEYS.FORM_FIELDS_ENABLED]) {
-    settings.formFieldsEnabled = changes[STORAGE_KEYS.FORM_FIELDS_ENABLED].newValue ?? DEFAULT_VALUES.FORM_FIELDS_ENABLED;
-  }
-
-  if (changes[STORAGE_KEYS.TRIGGER_POSITION]) {
-    settings.triggerPosition = changes[STORAGE_KEYS.TRIGGER_POSITION].newValue ?? DEFAULT_VALUES.TRIGGER_POSITION;
-  }
-
-  if (changes[STORAGE_KEYS.ENABLE_DEFINITIONS]) {
-    settings.enableDefinitions = changes[STORAGE_KEYS.ENABLE_DEFINITIONS].newValue ?? DEFAULT_VALUES.ENABLE_DEFINITIONS;
-  }
-
-  if (changes[STORAGE_KEYS.ENABLE_TRANSLATIONS]) {
-    settings.enableTranslations = changes[STORAGE_KEYS.ENABLE_TRANSLATIONS].newValue ?? DEFAULT_VALUES.ENABLE_TRANSLATIONS;
-  }
+  SettingsUtils.applyChanges(settings, changes);
 });
 
 // Clear caches on browser startup to ensure fresh data.

@@ -19,15 +19,14 @@
     let definitionPageHeights = [];
     let translationPageHeights = [];
     let settingsLoaded = false;
-    let settings = {
-      targetLanguage: DEFAULT_VALUES.TARGET_LANGUAGE,
-      sourceLanguage: DEFAULT_VALUES.SOURCE_LANGUAGE,
-      darkMode: DEFAULT_VALUES.DARK_MODE,
-      formFieldsEnabled: DEFAULT_VALUES.FORM_FIELDS_ENABLED,
-      triggerPosition: DEFAULT_VALUES.TRIGGER_POSITION,
-      enableDefinitions: DEFAULT_VALUES.ENABLE_DEFINITIONS,
-      enableTranslations: DEFAULT_VALUES.ENABLE_TRANSLATIONS
-    };
+    let settings = SettingsUtils.createDefaults();
+
+    // Device type doesn't change mid-session - compute once and reuse rather than
+    // re-running UA/touch/matchMedia checks on every single selection event.
+    const isMobileDevice = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      ('ontouchstart' in window) ||
+      (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+      window.matchMedia('(pointer: coarse)').matches;
 
     async function loadSettings() {
       const response = await sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
@@ -55,47 +54,34 @@
       selectionRect = null;
     }
 
-    // React to settings changes made from the popup
+    // React to settings changes made from the popup. SettingsUtils.applyChanges updates
+    // `settings` in place and reports back which keys changed, so this only has to run
+    // the UI side effects specific to each key (or pair of keys).
     browser.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
 
-      if (changes[STORAGE_KEYS.TARGET_LANGUAGE]) {
-        settings.targetLanguage = changes[STORAGE_KEYS.TARGET_LANGUAGE].newValue ?? DEFAULT_VALUES.TARGET_LANGUAGE;
+      const updated = SettingsUtils.applyChanges(settings, changes);
+      if (!updated.length) return;
+
+      if (updated.includes('targetLanguage') || updated.includes('sourceLanguage')) {
         updateTranslationTitle();
         resetTooltipState();
       }
 
-      if (changes[STORAGE_KEYS.SOURCE_LANGUAGE]) {
-        settings.sourceLanguage = changes[STORAGE_KEYS.SOURCE_LANGUAGE].newValue ?? DEFAULT_VALUES.SOURCE_LANGUAGE;
-        updateTranslationTitle();
-        resetTooltipState();
-      }
-
-      if (changes[STORAGE_KEYS.DARK_MODE]) {
-        // Nullish coalescing (not ||) so an explicit `false` isn't replaced by the default
-        settings.darkMode = changes[STORAGE_KEYS.DARK_MODE].newValue ?? DEFAULT_VALUES.DARK_MODE;
+      if (updated.includes('darkMode')) {
         updateDarkMode();
       }
 
-      if (changes[STORAGE_KEYS.FORM_FIELDS_ENABLED]) {
-        settings.formFieldsEnabled = changes[STORAGE_KEYS.FORM_FIELDS_ENABLED].newValue ?? DEFAULT_VALUES.FORM_FIELDS_ENABLED;
+      if (updated.includes('formFieldsEnabled')) {
         // Re-evaluate immediately in case a form-field selection is currently showing
         resetTooltipState();
       }
 
-      if (changes[STORAGE_KEYS.TRIGGER_POSITION]) {
-        settings.triggerPosition = changes[STORAGE_KEYS.TRIGGER_POSITION].newValue ?? DEFAULT_VALUES.TRIGGER_POSITION;
+      if (updated.includes('triggerPosition')) {
         updateSelectionRect();
       }
 
-      if (changes[STORAGE_KEYS.ENABLE_DEFINITIONS]) {
-        settings.enableDefinitions = changes[STORAGE_KEYS.ENABLE_DEFINITIONS].newValue ?? DEFAULT_VALUES.ENABLE_DEFINITIONS;
-        updateSectionVisibility();
-        if (!settings.enableDefinitions && !settings.enableTranslations) resetTooltipState();
-      }
-
-      if (changes[STORAGE_KEYS.ENABLE_TRANSLATIONS]) {
-        settings.enableTranslations = changes[STORAGE_KEYS.ENABLE_TRANSLATIONS].newValue ?? DEFAULT_VALUES.ENABLE_TRANSLATIONS;
+      if (updated.includes('enableDefinitions') || updated.includes('enableTranslations')) {
         updateSectionVisibility();
         if (!settings.enableDefinitions && !settings.enableTranslations) resetTooltipState();
       }
@@ -109,7 +95,8 @@
     });
     document.documentElement.appendChild(host);
 
-    const shadow = host.attachShadow({ mode: 'open' });
+    // Closed so a page script can't reach in via host.shadowRoot to read or spoof the UI
+    const shadow = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
     style.textContent = `
       .wordglance-tooltip {
@@ -382,7 +369,10 @@
       if (el.tagName === 'TEXTAREA') return true;
       if (el.tagName === 'INPUT') {
         const type = (el.type || 'text').toLowerCase();
-        return ['text', 'search', 'url', 'tel', 'password'].includes(type);
+        // 'password' is intentionally excluded - selectionStart/selectionEnd/value on a
+        // password field return the real, unmasked characters, and a selection here would
+        // otherwise be sent straight to the dictionary/translation APIs.
+        return ['text', 'search', 'url', 'tel'].includes(type);
       }
       return false;
     }
@@ -483,7 +473,7 @@
       try {
         const rect = getFormFieldSelectionRect(el, start, end);
         if (!rect || (rect.width === 0 && rect.height === 0)) return null;
-        return { text, range: null, rect };
+        return { text, rect };
       } catch (e) {
         console.warn('Form field selection error:', e);
         return null;
@@ -491,6 +481,10 @@
     }
 
     function getSelectionInfo() {
+      // Settings haven't loaded yet - hold off rather than act on the hard-coded
+      // defaults (which may not match the user's real saved settings).
+      if (!settingsLoaded) return null;
+
       // Nothing to look up if the user has turned off both features
       if (!settings.enableDefinitions && !settings.enableTranslations) return null;
 
@@ -505,10 +499,9 @@
       if (!text || text.length > CONFIG.maxSelectionLength) return null;
 
       try {
-        const range = sel.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
+        const rect = sel.getRangeAt(0).getBoundingClientRect();
         if (!rect || (rect.width === 0 && rect.height === 0)) return null;
-        return { text, range, rect };
+        return { text, rect };
       } catch (e) {
         console.warn('Selection range error:', e);
         return null;
@@ -518,10 +511,7 @@
     // settings.triggerPosition picks the preferred side (above/below); falls back
     // to the other side if there's no room on screen.
     function positionTriggerIcon(rect) {
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-        ('ontouchstart' in window) ||
-        (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
-        window.matchMedia('(pointer: coarse)').matches;
+      const isMobile = isMobileDevice;
       const buttonSize = isMobile ? 32 : 24;
       const halfButton = buttonSize / 2;
       const spacing = isMobile ? 16 : 6;
@@ -802,14 +792,20 @@
 
       translationPages.forEach(page => {
         const pageDiv = createElement('div', 'content-page');
-        const grid = createElement('div', 'translation-grid');
 
-        for (let i = 0; i < CONFIG.translationsPerPage; i++) {
-          const cell = createElement('div', 'translation-text', page[i] || '');
-          grid.appendChild(cell);
+        if (!page.length) {
+          pageDiv.appendChild(createElement('div', 'translation-content error', ERROR_MESSAGES.NO_TRANSLATION));
+        } else {
+          const grid = createElement('div', 'translation-grid');
+
+          for (let i = 0; i < CONFIG.translationsPerPage; i++) {
+            const cell = createElement('div', 'translation-text', page[i] || '');
+            grid.appendChild(cell);
+          }
+
+          pageDiv.appendChild(grid);
         }
 
-        pageDiv.appendChild(grid);
         slider.appendChild(pageDiv);
       });
 
@@ -955,9 +951,16 @@
         }
       }
 
-      // No position fit perfectly - use the preferred spot and clamp into the viewport
+      // No position fit perfectly - pick whichever of above/below has more room, then
+      // clamp into the viewport as a last resort.
       if (!bestPosition) {
-        bestPosition = positions[0]; // Default to above
+        const spaceAbove = rect.top - margin;
+        const spaceBelow = vh - rect.bottom - margin;
+        const centeredLeft = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+
+        bestPosition = spaceBelow > spaceAbove
+          ? { left: centeredLeft, top: rect.bottom + spacing }
+          : { left: centeredLeft, top: rect.top - tooltipHeight - spacing };
 
         if (bestPosition.left < margin) {
           bestPosition.left = margin;
@@ -965,19 +968,7 @@
           bestPosition.left = vw - tooltipWidth - margin;
         }
 
-        if (bestPosition.top < margin) {
-          bestPosition.top = margin;
-        } else if (bestPosition.top + tooltipHeight > vh - margin) {
-          bestPosition.top = vh - tooltipHeight - margin;
-        }
-
-        // If still doesn't fit vertically, try below the selection
-        if (bestPosition.top < margin) {
-          bestPosition.top = rect.bottom + spacing;
-          if (bestPosition.top + tooltipHeight > vh - margin) {
-            bestPosition.top = vh - tooltipHeight - margin;
-          }
-        }
+        bestPosition.top = Math.max(margin, Math.min(bestPosition.top, vh - tooltipHeight - margin));
       }
 
       Object.assign(tooltip.style, {
@@ -1134,8 +1125,11 @@
     });
 
     document.addEventListener('click', (e) => {
+      // Check for `host`, not `tooltip`/`triggerIcon` directly: with a closed shadow
+      // root (see attachShadow above), composedPath() only ever exposes the host itself
+      // to listeners outside the tree, never the internal nodes.
       const path = e.composedPath();
-      if (path.includes(tooltip) || path.includes(triggerIcon)) return;
+      if (path.includes(host)) return;
 
       hideTooltip();
       // Unified check - a raw window.getSelection() check would hide the trigger

@@ -41,9 +41,52 @@ const StorageUtils = {
   },
 
   // Returns the stored value if the key is present, otherwise the default.
-  // Using hasOwnProperty (not ||) ensures explicit false/0 values aren't lost.
+  // Using Object.hasOwn (not ||) ensures explicit false/0 values aren't lost, and avoids
+  // calling hasOwnProperty directly on an object that could in principle lack it on its prototype.
   getValue(stored, key, defaultValue) {
-    return stored.hasOwnProperty(key) ? stored[key] : defaultValue;
+    return Object.hasOwn(stored, key) ? stored[key] : defaultValue;
+  }
+};
+
+// Centralizes the settings shape (SETTINGS_SCHEMA, in shared-constants.js) so
+// background.js, content.js, and popup.js don't each hand-roll their own copy of
+// "these are the keys, these are their storage keys, these are their defaults".
+const SettingsUtils = {
+  // A plain object of in-memory defaults, e.g. { targetLanguage: 'en', darkMode: false, ... }
+  createDefaults() {
+    const settings = {};
+    for (const [key, { default: def }] of Object.entries(SETTINGS_SCHEMA)) {
+      settings[key] = def;
+    }
+    return settings;
+  },
+
+  // Reads every settings key from storage in one call and resolves each to its
+  // real value or default.
+  async loadFromStorage() {
+    const storageKeys = Object.values(SETTINGS_SCHEMA).map(s => s.storageKey);
+    const stored = await StorageUtils.get(storageKeys);
+
+    const settings = {};
+    for (const [key, { storageKey, default: def }] of Object.entries(SETTINGS_SCHEMA)) {
+      settings[key] = StorageUtils.getValue(stored, storageKey, def);
+    }
+    return settings;
+  },
+
+  // Applies any changed keys from a browser.storage.onChanged `changes` object onto
+  // `target` in place. Returns the list of in-memory settings keys that were updated
+  // (e.g. ['darkMode']) so callers can run their own key-specific side effects.
+  applyChanges(target, changes) {
+    const updatedKeys = [];
+    for (const [key, { storageKey, default: def }] of Object.entries(SETTINGS_SCHEMA)) {
+      if (changes[storageKey]) {
+        // Nullish coalescing (not ||) so an explicit false/0 isn't replaced by the default
+        target[key] = changes[storageKey].newValue ?? def;
+        updatedKeys.push(key);
+      }
+    }
+    return updatedKeys;
   }
 };
 
@@ -76,8 +119,11 @@ const TextUtils = {
   sanitize(text) {
     if (!text || typeof text !== 'string') return '';
 
-    // Basic trimming and filtering
-    const cleaned = text.trim().replace(/[\x00-\x1F\x7F-\x9F<>'"&]/g, '');
+    // Basic trimming and filtering. Apostrophes are intentionally NOT stripped here -
+    // they're needed for contractions/possessives (don't, it's, O'Brien) and are already
+    // safe: output is always set via textContent (never innerHTML), and the translation
+    // request builds its query with URLSearchParams, which percent-encodes them itself.
+    const cleaned = text.trim().replace(/[\x00-\x1F\x7F-\x9F<>"&]/g, '');
 
     // Length validation
     if (cleaned.length === 0 || cleaned.length > CONFIG.maxSelectionLength) return '';

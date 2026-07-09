@@ -172,26 +172,9 @@ async function init() {
     positionOptions: document.querySelectorAll('#trigger-position-control .segmented-option')
   };
 
-  // Load current settings (getValue, not the raw object, so a stored `false` isn't lost)
-  const store = await StorageUtils.get([
-    STORAGE_KEYS.DARK_MODE,
-    STORAGE_KEYS.SOURCE_LANGUAGE,
-    STORAGE_KEYS.TARGET_LANGUAGE,
-    STORAGE_KEYS.ENABLE_DEFINITIONS,
-    STORAGE_KEYS.ENABLE_TRANSLATIONS,
-    STORAGE_KEYS.FORM_FIELDS_ENABLED,
-    STORAGE_KEYS.TRIGGER_POSITION
-  ]);
-
-  const settings = {
-    darkMode: StorageUtils.getValue(store, STORAGE_KEYS.DARK_MODE, DEFAULT_VALUES.DARK_MODE),
-    sourceLanguage: StorageUtils.getValue(store, STORAGE_KEYS.SOURCE_LANGUAGE, DEFAULT_VALUES.SOURCE_LANGUAGE),
-    targetLanguage: StorageUtils.getValue(store, STORAGE_KEYS.TARGET_LANGUAGE, DEFAULT_VALUES.TARGET_LANGUAGE),
-    enableDefinitions: StorageUtils.getValue(store, STORAGE_KEYS.ENABLE_DEFINITIONS, DEFAULT_VALUES.ENABLE_DEFINITIONS),
-    enableTranslations: StorageUtils.getValue(store, STORAGE_KEYS.ENABLE_TRANSLATIONS, DEFAULT_VALUES.ENABLE_TRANSLATIONS),
-    formFieldsEnabled: StorageUtils.getValue(store, STORAGE_KEYS.FORM_FIELDS_ENABLED, DEFAULT_VALUES.FORM_FIELDS_ENABLED),
-    triggerPosition: StorageUtils.getValue(store, STORAGE_KEYS.TRIGGER_POSITION, DEFAULT_VALUES.TRIGGER_POSITION)
-  };
+  // Load current settings (same schema-driven loader background.js and content.js use,
+  // so a stored `false`/`0` is never lost and all three stay in sync automatically)
+  const settings = await SettingsUtils.loadFromStorage();
 
   elements.darkToggle.checked = settings.darkMode;
   toggleDarkMode(settings.darkMode);

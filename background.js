@@ -6,8 +6,8 @@
 const settings = SettingsUtils.createDefaults();
 
 const caches = {
-  definitions: new LRUCache(CONFIG.cacheSize),
-  translations: new LRUCache(CONFIG.cacheSize)
+  definitions: new LRUCache(),
+  translations: new LRUCache()
 };
 
 async function loadSettings() {
@@ -47,8 +47,7 @@ async function loadCaches() {
 
 const cachesReady = loadCaches();
 
-// Debounced cache saving to reduce storage writes
-const saveCaches = debounce(async () => {
+async function persistCaches() {
   try {
     await StorageUtils.set({
       [STORAGE_KEYS.CACHE_DEFINITIONS]: JSON.stringify(caches.definitions.toObject()),
@@ -57,7 +56,11 @@ const saveCaches = debounce(async () => {
   } catch (e) {
     console.warn('Cache save error:', e);
   }
-}, CONFIG.cacheSaveDelay);
+}
+
+// Debounced during normal use to reduce storage writes; see onSuspend below for the
+// immediate flush needed when the debounce timer won't get a chance to fire.
+const saveCaches = debounce(persistCaches, CONFIG.cacheSaveDelay);
 
 async function clearAllCaches() {
   caches.definitions.clear();
@@ -243,6 +246,9 @@ browser.runtime.onMessage.addListener(async (msg) => {
         };
 
       case MESSAGE_TYPES.GET_DEFINITION: {
+        if (!settings.enableDefinitions) {
+          return { success: false, error: ERROR_MESSAGES.DEFINITIONS_DISABLED };
+        }
         if (settings.sourceLanguage !== 'en' && settings.sourceLanguage !== 'auto') {
           return {
             success: false,
@@ -254,6 +260,9 @@ browser.runtime.onMessage.addListener(async (msg) => {
       }
 
       case MESSAGE_TYPES.GET_TRANSLATION: {
+        if (!settings.enableTranslations) {
+          return { success: false, error: ERROR_MESSAGES.TRANSLATIONS_DISABLED };
+        }
         const transResult = await fetchTranslation(msg.text);
         return { success: true, data: transResult };
       }
@@ -292,3 +301,8 @@ browser.runtime.onStartup.addListener(async () => {
   await cachesReady;
   await clearAllCaches();
 });
+
+// This is a non-persistent background script - Firefox can unload it after a period
+// of inactivity. onSuspend is the last chance to flush any cache writes still sitting
+// in the debounce window from saveCaches(), so they aren't lost before the next wake.
+browser.runtime.onSuspend.addListener(persistCaches);

@@ -76,5 +76,7 @@ const ERROR_MESSAGES = {
   NETWORK_ERROR: 'Connection error - please try again',
   INVALID_WORD: 'Please select a valid word to look up',
   INVALID_TEXT: 'Please select valid text to translate',
-  SOURCE_NOT_ENGLISH: 'Definitions are only available for English words'
+  SOURCE_NOT_ENGLISH: 'Definitions are only available for English words',
+  DEFINITIONS_DISABLED: 'Definitions are turned off in settings',
+  TRANSLATIONS_DISABLED: 'Translations are turned off in settings'
 };

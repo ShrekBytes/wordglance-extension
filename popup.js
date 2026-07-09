@@ -48,16 +48,17 @@ function setupSelector(prefix, isSource, currentCode, onChange) {
   });
 
   elements.selector.addEventListener('click', (e) => {
-    if (!elements.dropdown.contains(e.target)) {
-      e.stopPropagation();
+    // Stop this from bubbling to the document-level listener that closes dropdowns
+    // on outside clicks (see init() below) - otherwise opening would immediately
+    // be undone by that same click.
+    e.stopPropagation();
 
-      const otherPrefix = prefix === 'source' ? 'target' : 'source';
-      closeDropdown(otherPrefix);
+    const otherPrefix = prefix === 'source' ? 'target' : 'source';
+    closeDropdown(otherPrefix);
 
-      elements.dropdown.classList.toggle('open');
-      if (elements.dropdown.classList.contains('open')) {
-        setTimeout(() => elements.search.focus(), 50);
-      }
+    elements.dropdown.classList.toggle('open');
+    if (elements.dropdown.classList.contains('open')) {
+      setTimeout(() => elements.search.focus(), 50);
     }
   });
 

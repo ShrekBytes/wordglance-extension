@@ -12,14 +12,18 @@
 
     let currentSelection = '';
     let selectionRect = null;
-    let currentDefinitionPage = 0;
-    let currentTranslationPage = 0;
-    let definitionPages = [];
-    let translationPages = [];
-    let definitionPageHeights = [];
-    let translationPageHeights = [];
     let settingsLoaded = false;
     let settings = SettingsUtils.createDefaults();
+
+    // Pagination state for the definition/translation sliders, keyed by kind so the
+    // functions below can operate on either without a repeated if/else per call.
+    function createSliderState() {
+      return { pages: [], currentPage: 0, heights: [] };
+    }
+    const sliderState = {
+      definition: createSliderState(),
+      translation: createSliderState()
+    };
 
     // Device type doesn't change mid-session - compute once and reuse rather than
     // re-running UA/touch/matchMedia checks on every single selection event.
@@ -43,12 +47,8 @@
       hideTooltip();
       hideTrigger();
 
-      currentDefinitionPage = 0;
-      currentTranslationPage = 0;
-      definitionPages = [];
-      translationPages = [];
-      definitionPageHeights = [];
-      translationPageHeights = [];
+      sliderState.definition = createSliderState();
+      sliderState.translation = createSliderState();
 
       currentSelection = '';
       selectionRect = null;
@@ -592,9 +592,10 @@
 
       renderSynAnt([], []);
       updatePronunciation('');
-      currentDefinitionPage = currentTranslationPage = 0;
-      definitionPageHeights = [];
-      translationPageHeights = [];
+      sliderState.definition.currentPage = 0;
+      sliderState.translation.currentPage = 0;
+      sliderState.definition.heights = [];
+      sliderState.translation.heights = [];
       clearCachedSelectors();
     }
 
@@ -613,7 +614,19 @@
 
     const debouncedSelectionHandler = debounce(onSelectionEvent, CONFIG.debounceDelay);
 
-    document.addEventListener('mouseup', onSelectionEvent, true);
+    // True if an event originated inside our own tooltip/trigger UI (e.g. clicking a
+    // pagination arrow). Checks `host`, not `tooltip`/`triggerIcon` directly: with a
+    // closed shadow root, composedPath() only ever exposes the host to listeners
+    // outside the tree, never the internal nodes. Needed on capture-phase listeners
+    // in particular, since they run before the tooltip's own stopPropagation can act.
+    function originatesInHost(e) {
+      return e.composedPath().includes(host);
+    }
+
+    document.addEventListener('mouseup', (e) => {
+      if (originatesInHost(e)) return;
+      onSelectionEvent();
+    }, true);
     document.addEventListener('keyup', (e) => {
       if (e.key === 'Escape') {
         hideTooltip();
@@ -622,21 +635,29 @@
       }
       debouncedSelectionHandler();
     }, true);
-    document.addEventListener('touchend', () => setTimeout(debouncedSelectionHandler, 100), { passive: true, capture: true });
+    document.addEventListener('touchend', (e) => {
+      if (originatesInHost(e)) return;
+      setTimeout(debouncedSelectionHandler, 100);
+    }, { passive: true, capture: true });
     document.addEventListener('selectionchange', () => {
       if (document.hasFocus()) setTimeout(debouncedSelectionHandler, 150);
     });
 
     const updateSelectionRect = () => {
-      if (selectionRect) {
-        const info = getSelectionInfo();
-        if (info) {
-          selectionRect = info.rect;
-          positionTriggerIcon(selectionRect);
-          showTrigger();
+      if (!selectionRect) return;
 
-          repositionTooltip();
-        }
+      const info = getSelectionInfo();
+      if (info) {
+        selectionRect = info.rect;
+        positionTriggerIcon(selectionRect);
+        showTrigger();
+        repositionTooltip();
+      } else {
+        // Selection no longer resolves to anything (e.g. its container scrolled out
+        // of the DOM) - stop tracking it rather than leaving stale UI in place.
+        hideTrigger();
+        hideTooltip();
+        selectionRect = null;
       }
     };
 
@@ -694,8 +715,7 @@
       const page = slider?.children?.[index];
       if (!page) return 0;
 
-      const heights = kind === 'definition' ? definitionPageHeights : translationPageHeights;
-      return heights[index] || measurePageHeight(page, slider.clientWidth);
+      return sliderState[kind].heights[index] || measurePageHeight(page, slider.clientWidth);
     }
 
     function smoothHeightTransition(container, targetHeight, immediate = false) {
@@ -704,15 +724,9 @@
         const prev = container.style.transition;
         container.style.transition = 'none';
         container.style.height = targetHeight + 'px';
-        if (window.requestAnimationFrame) {
-          requestAnimationFrame(() => {
-            container.style.transition = prev || 'height 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
-          });
-        } else {
-          setTimeout(() => {
-            container.style.transition = prev || 'height 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
-          }, 16);
-        }
+        requestAnimationFrame(() => {
+          container.style.transition = prev || 'height 0.4s cubic-bezier(0.25,0.46,0.45,0.94)';
+        });
       } else {
         container.style.height = targetHeight + 'px';
       }
@@ -739,21 +753,32 @@
       return pageDiv;
     }
 
+    // Common tail shared by renderDefinitionPages/renderTranslationPages: measures each
+    // page's natural height, syncs the slider/controls to the current page, and
+    // (re)attaches the height-sync handler for subsequent navigation.
+    function finalizeSlider(kind, slider, info, prev, next) {
+      const state = sliderState[kind];
+      state.heights = Array.from(slider.children).map(page => measurePageHeight(page, slider.clientWidth));
+      updateSlider(slider, info, prev, next, state.currentPage, state.pages.length, kind);
+      attachSliderHeightSync(kind);
+    }
+
     function renderDefinitionPages(defs) {
       const slider = tooltip.querySelector('.definition-slider');
       const info = tooltip.querySelector('.definition-info');
       const prev = tooltip.querySelector('.definition-prev');
       const next = tooltip.querySelector('.definition-next');
+      const state = sliderState.definition;
 
-      definitionPages = paginate(defs.slice(0, CONFIG.maxDefinitions), CONFIG.definitionsPerPage);
-      currentDefinitionPage = 0;
+      state.pages = paginate(defs.slice(0, CONFIG.maxDefinitions), CONFIG.definitionsPerPage);
+      state.currentPage = 0;
       slider.textContent = '';
 
-      definitionPages.forEach(page => {
+      state.pages.forEach(page => {
         const pageDiv = createElement('div', 'content-page');
 
         if (!page.length) {
-          pageDiv.appendChild(createElement('div', 'definition-content error', ERROR_MESSAGES.NO_DEFINITION));
+          pageDiv.appendChild(createElement('div', 'error', ERROR_MESSAGES.NO_DEFINITION));
         } else {
           page.forEach(d => {
             const defDiv = createElement('div', 'definition-item');
@@ -775,9 +800,7 @@
         slider.appendChild(pageDiv);
       });
 
-      definitionPageHeights = Array.from(slider.children).map(page => measurePageHeight(page, slider.clientWidth));
-      updateSlider(slider, info, prev, next, currentDefinitionPage, definitionPages.length, 'definition');
-      attachSliderHeightSync('definition');
+      finalizeSlider('definition', slider, info, prev, next);
     }
 
     function renderTranslationPages(items) {
@@ -785,16 +808,17 @@
       const info = tooltip.querySelector('.translation-info');
       const prev = tooltip.querySelector('.translation-prev');
       const next = tooltip.querySelector('.translation-next');
+      const state = sliderState.translation;
 
-      translationPages = paginate(items.slice(0, CONFIG.maxTranslations), CONFIG.translationsPerPage);
-      currentTranslationPage = 0;
+      state.pages = paginate(items.slice(0, CONFIG.maxTranslations), CONFIG.translationsPerPage);
+      state.currentPage = 0;
       slider.textContent = '';
 
-      translationPages.forEach(page => {
+      state.pages.forEach(page => {
         const pageDiv = createElement('div', 'content-page');
 
         if (!page.length) {
-          pageDiv.appendChild(createElement('div', 'translation-content error', ERROR_MESSAGES.NO_TRANSLATION));
+          pageDiv.appendChild(createElement('div', 'error', ERROR_MESSAGES.NO_TRANSLATION));
         } else {
           const grid = createElement('div', 'translation-grid');
 
@@ -809,9 +833,7 @@
         slider.appendChild(pageDiv);
       });
 
-      translationPageHeights = Array.from(slider.children).map(page => measurePageHeight(page, slider.clientWidth));
-      updateSlider(slider, info, prev, next, currentTranslationPage, translationPages.length, 'translation');
-      attachSliderHeightSync('translation');
+      finalizeSlider('translation', slider, info, prev, next);
     }
 
     function renderSynAnt(synonyms, antonyms) {
@@ -865,8 +887,7 @@
       const handler = (e) => {
         if (e.propertyName === 'transform') {
           const container = slider.closest('.content-container');
-          const index = kind === 'definition' ? currentDefinitionPage : currentTranslationPage;
-          const target = getPageHeight(slider, index, kind);
+          const target = getPageHeight(slider, sliderState[kind].currentPage, kind);
           if (container && target) smoothHeightTransition(container, target);
         }
       };
@@ -1002,20 +1023,18 @@
       ];
 
       function navigate(type, prevSelector, nextSelector, direction) {
-        const pages = type === 'definition' ? definitionPages : translationPages;
-        const currentPage = type === 'definition' ? currentDefinitionPage : currentTranslationPage;
-        const targetPage = currentPage + direction;
-        if (targetPage < 0 || targetPage >= pages.length) return;
+        const state = sliderState[type];
+        const targetPage = state.currentPage + direction;
+        if (targetPage < 0 || targetPage >= state.pages.length) return;
 
-        if (type === 'definition') currentDefinitionPage = targetPage;
-        else currentTranslationPage = targetPage;
+        state.currentPage = targetPage;
 
         const slider = tooltip.querySelector(`.${type}-slider`);
         const info = tooltip.querySelector(`.${type}-info`);
         const prevBtn = tooltip.querySelector(prevSelector);
         const nextBtn = tooltip.querySelector(nextSelector);
 
-        updateSlider(slider, info, prevBtn, nextBtn, targetPage, pages.length, type);
+        updateSlider(slider, info, prevBtn, nextBtn, targetPage, state.pages.length, type);
       }
 
       sliders.forEach(({ prev, next, type }) => {
@@ -1079,8 +1098,8 @@
             defSlider.textContent = '';
             if (defResponse.error === ERROR_MESSAGES.SOURCE_NOT_ENGLISH) {
               const infoPage = createElement('div', 'content-page');
-              infoPage.appendChild(createElement('div', 'definition-content info',
-                'Definitions are only available for English words. Please select English as the source language.'));
+              infoPage.appendChild(createElement('div', 'info',
+                `${ERROR_MESSAGES.SOURCE_NOT_ENGLISH}. Please select English as the source language.`));
               defSlider.appendChild(infoPage);
             } else {
               defSlider.appendChild(createContentPage(defResponse.error, true));
@@ -1093,6 +1112,7 @@
           defSlider.textContent = '';
           defSlider.appendChild(createContentPage(ERROR_MESSAGES.NETWORK_ERROR, true));
           renderSynAnt([], []);
+          repositionAfterRender();
         }
       }
 
@@ -1125,11 +1145,7 @@
     });
 
     document.addEventListener('click', (e) => {
-      // Check for `host`, not `tooltip`/`triggerIcon` directly: with a closed shadow
-      // root (see attachShadow above), composedPath() only ever exposes the host itself
-      // to listeners outside the tree, never the internal nodes.
-      const path = e.composedPath();
-      if (path.includes(host)) return;
+      if (originatesInHost(e)) return;
 
       hideTooltip();
       // Unified check - a raw window.getSelection() check would hide the trigger

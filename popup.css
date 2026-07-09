@@ -5,15 +5,20 @@ body.dark-page { background:#1a1a1a; }
 #app { background: transparent; width: 400px; padding: 0; }
 .wordglance-settings { width: 100%; box-sizing: border-box; background:#fff; padding:16px; font-size:14px; }
 .wordglance-settings.dark-mode { background:#1a1a1a; color:#e0e0e0; }
-.settings-header { font-weight:600; font-size:16px; color:#2c3e50; margin-bottom:12px; border-bottom:1px solid #ecf0f1; padding-bottom:8px; }
+.settings-header { font-weight:600; font-size:16px; color:#2c3e50; margin-bottom:8px; border-bottom:1px solid #ecf0f1; padding-bottom:6px; }
 .wordglance-settings.dark-mode .settings-header { color:#fff; border-bottom-color:#444; }
-.setting-section { margin-bottom:14px; }
-.setting-item { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding:8px 0; }
+.setting-section { margin-bottom:10px; }
+.setting-item { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; padding:6px 0; }
 .setting-item:last-child { margin-bottom:0; }
 .setting-label { color:#2c3e50; font-size:14px; }
 .wordglance-settings.dark-mode .setting-label { color:#e0e0e0; }
 .setting-tip { font-size:11px; color:#7f8c8d; margin-top:2px; font-style:italic; }
 .wordglance-settings.dark-mode .setting-tip { color:#ccc; }
+
+/* This section is scoped to the current site rather than a global setting like the
+   rest - a faint tint sets it apart without competing with everything above it. */
+.site-scope { background:#f4f8fb; border-radius:6px; padding:4px 10px; }
+.wordglance-settings.dark-mode .site-scope { background:rgba(255,255,255,0.05); }
 .toggle-switch { position:relative; display:inline-block; width:44px; height:24px; }
 .toggle-switch input { opacity:0; width:0; height:0; }
 .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#bdc3c7; transition:all .3s; border-radius:24px; }
@@ -49,9 +54,9 @@ body.dark-page { background:#1a1a1a; }
 .wordglance-settings.dark-mode .segmented-option:hover:not(.selected) { background:#444; }
 .wordglance-settings.dark-mode .segmented-option.selected { background:#3498db; color:#fff; }
 
-.credit-section { border-top:1px solid #e0e0e0; padding-top:20px; margin-top:15px; text-align:center; }
+.credit-section { border-top:1px solid #e0e0e0; padding-top:14px; margin-top:10px; text-align:center; }
 .wordglance-settings.dark-mode .credit-section { border-top-color:#444; }
-.help-link { display:block; margin-bottom:12px; color:#3498db; text-decoration:none; font-size:14px; }
+.help-link { display:block; margin-bottom:8px; color:#3498db; text-decoration:none; font-size:14px; }
 .help-link:hover { color:#2980b9; }
 .wordglance-settings.dark-mode .help-link { color:#5dade2; }
 .wordglance-settings.dark-mode .help-link:hover { color:#85c1e9; }

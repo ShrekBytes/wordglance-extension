@@ -45,6 +45,7 @@ const SETTINGS_SCHEMA = {
 // permissions declared in manifest.json at a glance.
 const API_ENDPOINTS = {
   DICTIONARY: 'https://api.dictionaryapi.dev/api/v2/entries/en/',
+  DICTIONARY_FALLBACK: 'https://api.datamuse.com/words',
   TRANSLATION: 'https://translation-1e79fb3f3adb.herokuapp.com/translate'
 };
 

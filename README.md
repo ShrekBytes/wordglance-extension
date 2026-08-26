@@ -105,9 +105,10 @@ Click the extension icon to access settings:
 
 ## Privacy & permissions
 
-**What's sent, and where:** When you look up a selection, the word or phrase (plus your chosen source/target language codes) is sent directly from your browser to two services:
+**What's sent, and where:** When you look up a selection, the word or phrase (plus your chosen source/target language codes) is sent directly from your browser to these services:
 
 - [Dictionary API](https://dictionaryapi.dev/) for definitions, examples, synonyms, antonyms, and pronunciation audio
+- [Datamuse API](https://www.datamuse.com/api/) as a fallback for English definitions, synonyms, and antonyms when the primary dictionary service is unavailable
 - [Free Translate API](https://translation-1e79fb3f3adb.herokuapp.com/) for translations
 
 That's the only data that ever leaves your browser. WordGlance itself doesn't run any servers, doesn't log your lookups, doesn't use analytics or tracking, and doesn't have accounts. Your settings, cache, and per-site on/off list are stored locally in Firefox via `browser.storage.local` and are never transmitted anywhere.
@@ -116,7 +117,8 @@ That's the only data that ever leaves your browser. WordGlance itself doesn't ru
 
 - `storage` - save your settings and cache locally
 - `activeTab` - read the current tab's hostname so the per-site toggle knows which site you're on
-- Access to `api.dictionaryapi.dev` and the translation API domain - the two lookups above
+- Access to `api.dictionaryapi.dev` and the translation API domain - the primary dictionary and translation lookups above
+- Access to `api.datamuse.com` - fallback dictionary lookups when the primary service is unavailable
 
 ## ❓ Common questions
 
@@ -191,6 +193,7 @@ The extension uses browser storage for user preferences:
 ### APIs used
 
 - **Dictionary**: [Dictionary API](https://dictionaryapi.dev/) - Free English dictionary
+- **Dictionary fallback**: [Datamuse API](https://www.datamuse.com/api/) - English definitions and related words from Wiktionary and WordNet
 - **Translation**: [Free Translate API](https://translation-1e79fb3f3adb.herokuapp.com/) - Multi-language translation
 
 Only the selected word/phrase and your chosen language codes are sent to these APIs - see [Privacy & permissions](#privacy--permissions).

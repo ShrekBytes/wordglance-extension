@@ -140,12 +140,20 @@ async function fetchDatamuseWords(params) {
 async function fetchFallbackDefinition(key) {
   // qe=sp makes the first result describe the exact query instead of a similarly
   // spelled word. Definitions are sourced from Wiktionary and WordNet by Datamuse.
-  const entries = await fetchDatamuseWords({
+  const definitionRequest = fetchDatamuseWords({
     sp: key,
     qe: 'sp',
     md: 'd',
     max: '1'
   });
+  // Start these at the same time as the definition request so the optional related
+  // words don't add two more network round trips before anything can be displayed.
+  const relatedWordsRequest = Promise.allSettled([
+    fetchDatamuseWords({ rel_syn: key, max: String(CONFIG.maxSynonyms) }),
+    fetchDatamuseWords({ rel_ant: key, max: String(CONFIG.maxAntonyms) })
+  ]);
+
+  const entries = await definitionRequest;
   const entry = Array.isArray(entries)
     ? entries.find(item => Array.isArray(item.defs) && item.defs.length)
     : null;
@@ -154,10 +162,7 @@ async function fetchFallbackDefinition(key) {
 
   // Related-word lookups are useful extras, but they should never make an otherwise
   // successful definition fail if either optional request is unavailable.
-  const [synonymResult, antonymResult] = await Promise.allSettled([
-    fetchDatamuseWords({ rel_syn: key, max: String(CONFIG.maxSynonyms) }),
-    fetchDatamuseWords({ rel_ant: key, max: String(CONFIG.maxAntonyms) })
-  ]);
+  const [synonymResult, antonymResult] = await relatedWordsRequest;
   const wordsFrom = result => result.status === 'fulfilled' && Array.isArray(result.value)
     ? result.value.map(item => item.word).filter(Boolean)
     : [];
@@ -173,6 +178,29 @@ async function fetchFallbackDefinition(key) {
   };
 }
 
+async function fetchPrimaryDefinition(key) {
+  let response;
+  try {
+    response = await fetchWithTimeout(
+      `${API_ENDPOINTS.DICTIONARY}${encodeURIComponent(key)}`
+    );
+  } catch (e) {
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
+
+  if (response.status === 404) throw new Error(ERROR_MESSAGES.NO_DEFINITION);
+  if (!response.ok) throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+
+  try {
+    const result = parseDictionaryApiResult(await response.json());
+    if (!result.defs.length) throw new Error(ERROR_MESSAGES.NO_DEFINITION);
+    return result;
+  } catch (e) {
+    if (e.message === ERROR_MESSAGES.NO_DEFINITION) throw e;
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
+}
+
 async function fetchDefinition(word) {
   const key = TextUtils.sanitize(word)?.toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
@@ -184,39 +212,25 @@ async function fetchDefinition(word) {
   const cached = caches.definitions.get(key);
   if (cached) return cached;
 
-  let primaryStatus = null;
+  let result;
   try {
-    const res = await fetchWithTimeout(
-      `${API_ENDPOINTS.DICTIONARY}${encodeURIComponent(key)}`
-    );
-    primaryStatus = res.status;
-
-    if (res.ok) {
-      const result = parseDictionaryApiResult(await res.json());
-      if (result.defs.length) {
-        caches.definitions.set(key, result);
-        saveCaches();
-        return result;
-      }
-    }
+    // The original service can sit behind a long proxy timeout when it is down.
+    // Start both independent providers now and render whichever valid result wins.
+    result = await Promise.any([
+      fetchPrimaryDefinition(key),
+      fetchFallbackDefinition(key)
+    ]);
   } catch (e) {
-    // Network, timeout, and malformed-response failures all fall through to the
-    // independent provider below.
-  }
-
-  try {
-    const result = await fetchFallbackDefinition(key);
-    if (!result.defs.length) throw new Error(ERROR_MESSAGES.NO_DEFINITION);
-
-    caches.definitions.set(key, result);
-    saveCaches();
-    return result;
-  } catch (e) {
-    if (primaryStatus === 404 || e.message === ERROR_MESSAGES.NO_DEFINITION) {
+    const providerErrors = Array.isArray(e.errors) ? e.errors : [e];
+    if (providerErrors.some(error => error?.message === ERROR_MESSAGES.NO_DEFINITION)) {
       throw new Error(ERROR_MESSAGES.NO_DEFINITION);
     }
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
+
+  caches.definitions.set(key, result);
+  saveCaches();
+  return result;
 }
 
 async function fetchTranslation(text) {

@@ -50,13 +50,13 @@ function createBackground(fetchImpl) {
   return context;
 }
 
-test('uses Datamuse when the primary dictionary API is unavailable', async () => {
+test('uses Datamuse without waiting when the primary dictionary API stalls', async () => {
   const requestedUrls = [];
   const context = createBackground(async url => {
     requestedUrls.push(url);
 
     if (url.startsWith('https://api.dictionaryapi.dev/')) {
-      return response('error code: 522', 522);
+      return new Promise(() => {});
     }
     if (url.includes('rel_syn=')) {
       return response([{ word: 'bright' }, { word: 'intelligent' }]);
@@ -85,13 +85,14 @@ test('uses Datamuse when the primary dictionary API is unavailable', async () =>
     audio: ''
   });
   assert.equal(requestedUrls.length, 4);
-  assert.match(requestedUrls[1], /api\.datamuse\.com\/words/);
+  assert.equal(requestedUrls.filter(url => url.includes('api.datamuse.com')).length, 3);
 });
 
-test('keeps using the richer primary response when it is healthy', async () => {
+test('keeps a fast richer primary response when it is healthy', async () => {
   let requestCount = 0;
-  const context = createBackground(async () => {
+  const context = createBackground(async url => {
     requestCount += 1;
+    if (url.includes('api.datamuse.com')) return response([]);
     return response([{
       phonetics: [{ audio: '//audio.example/brilliant.mp3' }],
       meanings: [{
@@ -110,7 +111,7 @@ test('keeps using the richer primary response when it is healthy', async () => {
 
   const result = await vm.runInContext("fetchDefinition('Brilliant')", context);
 
-  assert.equal(requestCount, 1);
+  assert.equal(requestCount, 4);
   assert.equal(result.defs[0].definition, 'Very impressive or successful.');
   assert.equal(result.audio, 'https://audio.example/brilliant.mp3');
 });

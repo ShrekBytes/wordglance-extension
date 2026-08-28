@@ -71,136 +71,6 @@ async function clearAllCaches() {
   });
 }
 
-function parseDictionaryApiResult(data) {
-  const defs = [];
-  const syns = new Set();
-  const ants = new Set();
-  let audio = '';
-
-  (data || []).forEach(entry => {
-    if (!audio) {
-      const withAudio = (entry.phonetics || []).find(p => p.audio);
-      if (withAudio) {
-        // Some entries return protocol-relative URLs (e.g. "//...")
-        audio = withAudio.audio.startsWith('//') ? `https:${withAudio.audio}` : withAudio.audio;
-      }
-    }
-
-    (entry.meanings || []).forEach(m => {
-      (m.synonyms || []).forEach(s => syns.add(s));
-      (m.antonyms || []).forEach(a => ants.add(a));
-
-      (m.definitions || []).forEach(d => {
-        if (d.definition) {
-          defs.push({
-            definition: d.definition,
-            partOfSpeech: m.partOfSpeech || '',
-            example: d.example || ''
-          });
-        }
-        (d.synonyms || []).forEach(s => syns.add(s));
-        (d.antonyms || []).forEach(a => ants.add(a));
-      });
-    });
-  });
-
-  return {
-    defs: defs.slice(0, CONFIG.maxDefinitions),
-    synonyms: Array.from(syns).slice(0, CONFIG.maxSynonyms),
-    antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms),
-    audio
-  };
-}
-
-function parseDatamuseDefinition(rawDefinition) {
-  const separator = rawDefinition.indexOf('\t');
-  const code = separator === -1 ? '' : rawDefinition.slice(0, separator);
-  const definition = (separator === -1 ? rawDefinition : rawDefinition.slice(separator + 1)).trim();
-  const partsOfSpeech = {
-    n: 'noun',
-    v: 'verb',
-    adj: 'adjective',
-    adv: 'adverb'
-  };
-
-  return {
-    definition,
-    partOfSpeech: partsOfSpeech[code] || code,
-    example: ''
-  };
-}
-
-async function fetchDatamuseWords(params) {
-  const query = new URLSearchParams(params);
-  const response = await fetchWithTimeout(`${API_ENDPOINTS.DICTIONARY_FALLBACK}?${query}`);
-  if (!response.ok) throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
-  return response.json();
-}
-
-async function fetchFallbackDefinition(key) {
-  // qe=sp makes the first result describe the exact query instead of a similarly
-  // spelled word. Definitions are sourced from Wiktionary and WordNet by Datamuse.
-  const definitionRequest = fetchDatamuseWords({
-    sp: key,
-    qe: 'sp',
-    md: 'd',
-    max: '1'
-  });
-  // Start these at the same time as the definition request so the optional related
-  // words don't add two more network round trips before anything can be displayed.
-  const relatedWordsRequest = Promise.allSettled([
-    fetchDatamuseWords({ rel_syn: key, max: String(CONFIG.maxSynonyms) }),
-    fetchDatamuseWords({ rel_ant: key, max: String(CONFIG.maxAntonyms) })
-  ]);
-
-  const entries = await definitionRequest;
-  const entry = Array.isArray(entries)
-    ? entries.find(item => Array.isArray(item.defs) && item.defs.length)
-    : null;
-
-  if (!entry) throw new Error(ERROR_MESSAGES.NO_DEFINITION);
-
-  // Related-word lookups are useful extras, but they should never make an otherwise
-  // successful definition fail if either optional request is unavailable.
-  const [synonymResult, antonymResult] = await relatedWordsRequest;
-  const wordsFrom = result => result.status === 'fulfilled' && Array.isArray(result.value)
-    ? result.value.map(item => item.word).filter(Boolean)
-    : [];
-
-  return {
-    defs: entry.defs
-      .map(parseDatamuseDefinition)
-      .filter(def => def.definition)
-      .slice(0, CONFIG.maxDefinitions),
-    synonyms: wordsFrom(synonymResult).slice(0, CONFIG.maxSynonyms),
-    antonyms: wordsFrom(antonymResult).slice(0, CONFIG.maxAntonyms),
-    audio: ''
-  };
-}
-
-async function fetchPrimaryDefinition(key) {
-  let response;
-  try {
-    response = await fetchWithTimeout(
-      `${API_ENDPOINTS.DICTIONARY}${encodeURIComponent(key)}`
-    );
-  } catch (e) {
-    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
-  }
-
-  if (response.status === 404) throw new Error(ERROR_MESSAGES.NO_DEFINITION);
-  if (!response.ok) throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
-
-  try {
-    const result = parseDictionaryApiResult(await response.json());
-    if (!result.defs.length) throw new Error(ERROR_MESSAGES.NO_DEFINITION);
-    return result;
-  } catch (e) {
-    if (e.message === ERROR_MESSAGES.NO_DEFINITION) throw e;
-    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
-  }
-}
-
 async function fetchDefinition(word) {
   const key = TextUtils.sanitize(word)?.toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
@@ -212,25 +82,78 @@ async function fetchDefinition(word) {
   const cached = caches.definitions.get(key);
   if (cached) return cached;
 
-  let result;
+  let res;
   try {
-    // The original service can sit behind a long proxy timeout when it is down.
-    // Start both independent providers now and render whichever valid result wins.
-    result = await Promise.any([
-      fetchPrimaryDefinition(key),
-      fetchFallbackDefinition(key)
-    ]);
+    res = await fetchWithTimeout(
+      `${API_ENDPOINTS.DICTIONARY}${encodeURIComponent(key)}`
+    );
   } catch (e) {
-    const providerErrors = Array.isArray(e.errors) ? e.errors : [e];
-    if (providerErrors.some(error => error?.message === ERROR_MESSAGES.NO_DEFINITION)) {
-      throw new Error(ERROR_MESSAGES.NO_DEFINITION);
-    }
+    // The fetch itself failed - offline, DNS, timed out, etc. This is a genuine connection problem.
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 
-  caches.definitions.set(key, result);
-  saveCaches();
-  return result;
+  // The API responds with 404 when the word simply has no entry - that's not a connection
+  // problem, so it gets its own accurate message instead of the generic network error.
+  if (res.status === 404) {
+    throw new Error(ERROR_MESSAGES.NO_DEFINITION);
+  }
+  if (!res.ok) {
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
+
+  try {
+    const data = await res.json();
+
+    // Extract definitions, synonyms, antonyms, and pronunciation audio
+    const defs = [];
+    const syns = new Set();
+    const ants = new Set();
+    let audio = '';
+
+    (data || []).forEach(entry => {
+      if (!audio) {
+        const withAudio = (entry.phonetics || []).find(p => p.audio);
+        if (withAudio) {
+          // Some entries return protocol-relative URLs (e.g. "//...")
+          audio = withAudio.audio.startsWith('//') ? `https:${withAudio.audio}` : withAudio.audio;
+        }
+      }
+
+      (entry.meanings || []).forEach(m => {
+        // Collect synonyms and antonyms at meaning level
+        (m.synonyms || []).forEach(s => syns.add(s));
+        (m.antonyms || []).forEach(a => ants.add(a));
+
+        // Collect definitions
+        (m.definitions || []).forEach(d => {
+          if (d.definition) {
+            defs.push({
+              definition: d.definition,
+              partOfSpeech: m.partOfSpeech || '',
+              example: d.example || ''
+            });
+          }
+          // Collect synonyms and antonyms at definition level
+          (d.synonyms || []).forEach(s => syns.add(s));
+          (d.antonyms || []).forEach(a => ants.add(a));
+        });
+      });
+    });
+
+    const result = {
+      defs: defs.slice(0, CONFIG.maxDefinitions),
+      synonyms: Array.from(syns).slice(0, CONFIG.maxSynonyms),
+      antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms),
+      audio
+    };
+
+    // Cache result and trigger debounced save
+    caches.definitions.set(key, result);
+    saveCaches();
+    return result;
+  } catch (e) {
+    throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+  }
 }
 
 async function fetchTranslation(text) {

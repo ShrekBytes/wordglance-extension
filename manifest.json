@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "WordGlance - Dictionary & Translation",
-  "version": "3.5.1",
+  "version": "3.5.3",
   "description": "Get instant dictionary definitions and translations for any text on any website!",
   "icons": {
     "16": "assets/icon_16.png",
@@ -13,11 +13,12 @@
     "storage",
     "activeTab",
     "https://api.dictionaryapi.dev/*",
+    "https://api.datamuse.com/*",
     "https://translation-1e79fb3f3adb.herokuapp.com/*"
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "{f83d5c69-cfd7-4d8d-b2eb-555d2d4b7001}",
+      "id": "wordglance@hassannawaz1210.github",
       "strict_min_version": "142.0",
       "data_collection_permissions": {
         "required": [

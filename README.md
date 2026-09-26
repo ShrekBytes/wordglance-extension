@@ -1,5 +1,11 @@
 # WordGlance 📖
 
+> ⚠️ **Project Status: Paused**
+>
+> Development of the WordGlance Firefox extension is currently paused. The free APIs this extension depends on for dictionary definitions and translations are no longer working reliably, so the extension may not function as expected right now.
+>
+> Development will resume once suitable free APIs for translation, dictionary definitions, and related features are available again.
+
 Get instant dictionary definitions and translations for any text on any website! Just select text and click the book icon.
 
 > **For Chrome, Edge, Safari, and other browsers**:  

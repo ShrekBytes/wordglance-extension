@@ -378,7 +378,7 @@ than one: a loopback-only namespace does not by itself stop Gecko serving a
 `moz-extension://` read, and a package without `data/` produces exactly that
 symptom. Which package that earlier run loaded is not recorded anywhere, so
 naming it as the cause would be a guess — and a stale artefact in `dist/` is a
-better candidate than the namespace, not a proven one. Issue #24 is the stale
+better candidate than the namespace, not a proven one. Issue #26 is the stale
 artefact.
 
 One limit worth stating: the error text does not separate the two causes, because

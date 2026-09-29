@@ -8,7 +8,7 @@
 */
 
 const assert = require('node:assert/strict');
-const { existsSync, readFileSync, statSync } = require('node:fs');
+const { existsSync, readFileSync, readdirSync, statSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -756,3 +756,81 @@ function readArtefact() {
   const zlib = require('node:zlib');
   return JSON.parse(zlib.gunzipSync(readFileSync(ARTEFACT)).toString('utf8'));
 }
+
+// The names inside a zip, read from its central directory.
+//
+// Written out rather than shelled out to `unzip` because a test that depends on
+// an external binary fails on a machine without it, and the whole point here is
+// to be a check that runs everywhere the suite runs. Only the directory is read:
+// the question is which files are in the package, never what is inside one.
+//
+// Two signatures and three length fields are the whole format that is needed, and
+// they are at fixed offsets rather than at offsets derived from the entry before,
+// so a walk cannot lose its place part-way through a listing.
+const ZIP_EOCD = 0x06054b50;
+const ZIP_CENTRAL_HEADER = 0x02014b50;
+const CENTRAL_HEADER_SIZE = 46;
+
+function zipEntryNames(file) {
+  const bytes = readFileSync(file);
+
+  // The end-of-central-directory record sits at the very end, after a comment of
+  // up to 64 KB, so it is searched for from the back rather than assumed.
+  let end = -1;
+  for (let at = bytes.length - 22; at >= 0; at--) {
+    if (bytes.readUInt32LE(at) === ZIP_EOCD) {
+      end = at;
+      break;
+    }
+  }
+  if (end < 0) throw new Error(`${file} is not a zip: no end-of-central-directory record`);
+
+  const count = bytes.readUInt16LE(end + 10);
+  const names = [];
+
+  for (let at = bytes.readUInt32LE(end + 16), read = 0; read < count; read++) {
+    if (bytes.readUInt32LE(at) !== ZIP_CENTRAL_HEADER) {
+      throw new Error(`${file} is not a readable zip: bad central directory header`);
+    }
+    const nameLength = bytes.readUInt16LE(at + 28);
+    const extraLength = bytes.readUInt16LE(at + 30);
+    const commentLength = bytes.readUInt16LE(at + 32);
+
+    names.push(bytes.toString('utf8', at + CENTRAL_HEADER_SIZE, at + CENTRAL_HEADER_SIZE + nameLength));
+    at += CENTRAL_HEADER_SIZE + nameLength + extraLength + commentLength;
+  }
+
+  return names;
+}
+
+// Every package in `dist/`, which is where a reader verifying a claim about the
+// extension will look for one.
+const packages = readdirSync(path.join(root, 'dist'))
+  .filter(name => name.endsWith('.xpi'))
+  .map(name => path.join(root, 'dist', name));
+
+// A package that cannot answer a common word offline is a package that breaks
+// the promise ADR-0002 makes, and `dist/` is where a reader goes to check that
+// the promise is real.
+//
+// Two of them sat here for several releases without `data/`, and a real-browser
+// check reported the exact symptom a package without it produces
+// (`Connection error - please try again` for a word the bundle carries) before
+// anyone established that the network was not at fault. The test above catches a
+// build that leaves `data/` out; this one catches a package already built
+// without it, which is the failure that reached a reader.
+//
+// Read out of each package rather than out of the workflow's file list, because
+// the workflow describes what the *next* build will contain and this asks what
+// the committed one does. A stale artefact is exactly the gap between the two.
+test('every package in dist/ carries the bundled dictionary', { skip: !packages.length }, () => {
+  for (const file of packages) {
+    const names = zipEntryNames(file);
+    assert.ok(
+      names.some(name => name.startsWith('data/')),
+      `${path.basename(file)} has no data/ directory, so a common word read out ` +
+      'of it falls through to the live provider and answers a connection error ' +
+      'with no network. Remove it, or rebuild it against the current manifest.'
+    );
+  }
+});

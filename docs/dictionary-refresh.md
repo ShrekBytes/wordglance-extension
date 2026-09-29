@@ -372,14 +372,19 @@ The namespace was not the cause. The last row is a control: the same namespace,
 the same two headwords, and a package built without `data/`. It reproduces the
 symptom an earlier check reported — `happy` answering `Connection error - please
 try again`, which is only reachable when the packaged read returned nothing and
-every provider was unreachable — and `dist/` still holds two 3.5.1 packages with
-no `data/` directory at all. What is established is therefore two things rather
-than one: a loopback-only namespace does not by itself stop Gecko serving a
-`moz-extension://` read, and a package without `data/` produces exactly that
-symptom. Which package that earlier run loaded is not recorded anywhere, so
-naming it as the cause would be a guess — and a stale artefact in `dist/` is a
-better candidate than the namespace, not a proven one. Issue #26 is the stale
-artefact.
+every provider was unreachable — and `dist/` held two 3.5.1 packages with no
+`data/` directory at all, either of which produces it. What is established is
+therefore two things rather than one: a loopback-only namespace does not by
+itself stop Gecko serving a `moz-extension://` read, and a package without
+`data/` produces exactly that symptom. Which package that earlier run loaded is
+not recorded anywhere, so naming it as the cause would be a guess — and a stale
+artefact in `dist/` was a better candidate than the namespace, not a proven one.
+Those two packages are gone as of #26, which is the one thing here that was
+actionable: `dist/` now holds only a package carrying the dictionary, so the
+artefact that would break the promise is no longer sitting next to the one that
+keeps it. The signed 3.5.1 build remains attached to its published `v3.5.1`
+release, which is a historical fact about a version that really shipped and is
+not a package this repository offers.
 
 One limit worth stating: the error text does not separate the two causes, because
 a file that is not there and a network that is not there both fail as

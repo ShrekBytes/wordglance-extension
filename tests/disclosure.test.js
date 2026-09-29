@@ -3,14 +3,15 @@
 
   Every host the extension can reach is named in the reader-facing documents, and
   nothing is named there that it cannot reach. ADR-0004 requires the listing to
-  name every third party that receives the selected word, and
+  name every third party that receives the selected word,
   docs/dictionary-refresh.md puts the CC BY-SA credit the bundled data owes in
-  the listing and the settings. Both are obligations, and both are the kind of
-  thing that rots silently: a host added to the manifest is a working code
-  change, so it is easy to make and easy not to write down.
+  the listing and in the settings, and issue #14 puts the same disclosure inside
+  the settings a reader already has open. All three are obligations, and all
+  three are the kind of thing that rots silently: a host added to the manifest is
+  a working code change, so it is easy to make and easy not to write down.
 
   So this reads manifest.json rather than a list typed out again here. A
-  permission added without a line in both documents fails the build.
+  permission added without a line in every document fails the build.
 */
 
 const assert = require('node:assert/strict');
@@ -23,8 +24,22 @@ const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 const readme = readFileSync(path.join(root, 'README.md'), 'utf8');
 const listing = readFileSync(path.join(root, 'firefox-store-description.md'), 'utf8');
-const constants = readFileSync(path.join(root, 'shared-constants.js'), 'utf8');
+const settings = readFileSync(path.join(root, 'popup.html'), 'utf8');
 const background = readFileSync(path.join(root, 'background.js'), 'utf8');
+
+// Every script the extension ships, and so every host it can reach. The
+// endpoints are named in `shared-constants.js`, but Commons is not: the file
+// name a recording is played from is built in `wiktionary.js`, and a test
+// reading only the constants would not see that the permission behind it is
+// doing anything.
+const shipped = [
+  'shared-constants.js',
+  'shared-utilities.js',
+  'wiktionary.js',
+  'background.js',
+  'content.js',
+  'popup.js'
+].map(file => readFileSync(path.join(root, file), 'utf8'));
 
 // The hosts the extension holds a permission for. Everything else it fetches is
 // a file in its own package, which leaves nobody's machine.
@@ -32,14 +47,85 @@ const hosts = manifest.permissions
   .filter(permission => permission.startsWith('https://'))
   .map(permission => new URL(permission).host);
 
+// Every host named by a URL literal in a shipped script, which is the set the
+// code can actually reach.
+const reachable = shipped.flatMap(source =>
+  (source.match(/'https:\/\/[^']+'/g) || []).map(url => new URL(url.slice(1, -1)).host)
+);
+
+// The order a selected word actually travels in, and so the order every document
+// has to list the services in. Declared here rather than derived from the
+// manifest, because the manifest groups its permissions by chain - the
+// Definition chain, then the Translation chain - while a reader reading a list
+// top to bottom is reading the order their word leaves the machine.
+//
+// The manifest is not required to be in this order, but it is required to hold
+// a permission for every host here and to hold nothing else, which is what
+// makes the two lists checkable against each other rather than merely against
+// themselves.
+const CHAIN = [
+  'en.wiktionary.org',
+  'commons.wikimedia.org',
+  'freedictionaryapi.com',
+  'api.datamuse.com',
+  'clients5.google.com',
+  'api.mymemory.translated.net',
+  'www.bing.com'
+];
+
+// The three places a reader is told where their word goes. The settings are the
+// one that cannot rot unnoticed, because a reader who has already installed
+// never has to open either of the other two.
+const documents = [
+  ['the README', readme],
+  ['the store listing', listing],
+  ['the settings', settings]
+];
+
 test('the manifest holds a host permission for every service the code fetches', () => {
   // The guard against a call site with no permission behind it, which fails at
   // runtime in a browser and nowhere else.
-  for (const endpoint of constants.match(/'https:\/\/[^']+'/g) || []) {
-    const host = new URL(endpoint.slice(1, -1)).host;
+  for (const host of reachable) {
     assert.ok(
       hosts.includes(host),
       `${host} is called by the code but has no host permission in manifest.json`
+    );
+  }
+});
+
+test('the manifest holds no host permission the code cannot reach', () => {
+  // The other direction, and the one a dead host survives. The two services this
+  // manifest replaced - `api.dictionaryapi.dev` and a Heroku translation
+  // endpoint - were single anonymous maintainers, and both died. A permission
+  // left behind for either keeps asking the reader for access to a host the
+  // extension never contacts, which is the kind of permission an add-on review
+  // reads as overreach rather than as a leftover.
+  for (const host of hosts) {
+    assert.ok(
+      reachable.includes(host),
+      `${host} has a host permission in manifest.json but no code fetches it. ` +
+      'Remove the permission, or add the call site that needs it.'
+    );
+  }
+});
+
+test('the chain and the manifest name the same set of hosts', () => {
+  // The two are declared independently - the manifest by whoever added a
+  // provider, the chain here by whoever documented it - so the check that
+  // keeps them honest is the one that compares them. A provider added to the
+  // code and permissioned but never added here is a service every document
+  // silently omits, which is the failure this whole file exists to catch.
+  for (const host of CHAIN) {
+    assert.ok(
+      reachable.includes(host),
+      `the chain names ${host} but no code fetches it`
+    );
+  }
+  for (const host of hosts) {
+    assert.ok(
+      CHAIN.includes(host),
+      `${host} is permissioned but is not in the declared chain, so no document ` +
+      'can be shown to name it'
     );
   }
 });
@@ -53,7 +139,7 @@ test('the background script fetches nothing that is not a named endpoint', () =>
   }
 });
 
-for (const [name, document] of [['README', readme], ['the store listing', listing]]) {
+for (const [name, document] of documents) {
   test(`${name} names every host the extension can reach`, () => {
     for (const host of hosts) {
       assert.ok(
@@ -65,70 +151,118 @@ for (const [name, document] of [['README', readme], ['the store listing', listin
 
   test(`${name} no longer names a service the extension cannot reach`, () => {
     // The dictionary service that died in 2.5.0 and was replaced in 3.6.0. It
-    // is the service both documents used to promise, and a reader who installs
+    // is the service every document used to promise, and a reader who installs
     // expecting it is entitled to know it is gone.
     assert.ok(
       !document.includes('dictionaryapi.dev'),
       `${name} still names the dead dictionary service`
     );
   });
+
+  test(`${name} names the services in the order the chain asks them`, () => {
+    // A reader reading the list top to bottom should be reading the order a
+    // word actually travels in, so the claim "only when the ones before it had
+    // no answer" is checkable rather than decorative. Matched on the host
+    // rather than on the service's name, because a host is unique and a name is
+    // not - "Google" is a word, and so is "Bing" - and the first mention of
+    // each is the one a reader meets first.
+    const positions = CHAIN.map(host => document.indexOf(host));
+
+    for (const [i, position] of positions.entries()) {
+      assert.ok(position > -1, `${name} does not list ${CHAIN[i]}`);
+      if (i > 0) {
+        assert.ok(
+          position > positions[i - 1],
+          `${name} lists ${CHAIN[i]} before ${CHAIN[i - 1]}`
+        );
+      }
+    }
+  });
+
+  test(`${name} credits the licence the bundled data carries`, () => {
+    // A share-alike licence with a real attribution obligation rather than a
+    // formality: docs/dictionary-refresh.md puts the credit in the listing and
+    // in the settings, and the extension's own licence does not discharge it.
+    // The extraction tooling is named with it, because the data was made by
+    // running that over Wiktionary and not by Wiktionary alone.
+    for (const credit of ['kaikki.org', 'wiktextract', 'CC BY-SA 4.0']) {
+      assert.ok(document.includes(credit), `${name} does not credit ${credit}`);
+    }
+  });
 }
 
-test('the store listing does not claim WordGlance runs the services it calls', () => {
-  // It ran none of them. "Our translation API" was never true of a project with
-  // no server, and a disclosure that overstates what the author controls is a
-  // disclosure a reader cannot rely on.
-  assert.ok(
-    !/our translation API|our dictionary API/i.test(listing),
-    'the store listing claims an API WordGlance does not run'
-  );
-  assert.ok(
-    /no servers/i.test(listing),
-    'the store listing does not say that WordGlance runs no server of its own'
-  );
-});
+for (const [name, document] of [['the store listing', listing], ['the README', readme]]) {
+  test(`${name} does not claim WordGlance runs the services it calls`, () => {
+    // It ran none of them. "Our translation API" was never true of a project
+    // with no server, and a disclosure that overstates what the author
+    // controls is a disclosure a reader cannot rely on.
+    assert.ok(
+      !/our translation API|our dictionary API/i.test(document),
+      `${name} claims an API WordGlance does not run`
+    );
+    assert.ok(
+      /no servers/i.test(document),
+      `${name} does not say that WordGlance runs no server of its own`
+    );
+  });
 
-test('the store listing credits the licence the bundled data carries', () => {
-  // A share-alike licence with a real attribution obligation, which
-  // docs/dictionary-refresh.md says is owed in the listing and in the settings.
-  for (const credit of ['kaikki.org', 'wiktextract', 'CC BY-SA 4.0']) {
-    assert.ok(listing.includes(credit), `the store listing does not credit ${credit}`);
-  }
-});
+  test(`${name} says a fallback Translation is rougher than a curated one`, () => {
+    // The chain returns one word where Wiktionary would have offered several to
+    // choose between, and ADR-0003 makes the choice between formal and
+    // colloquial the point. A reader who cannot tell a fallback answer from a
+    // curated one is being asked to trust a difference they were never shown.
+    assert.ok(
+      /rougher|fallback/i.test(document),
+      `${name} does not distinguish a fallback Translation from a curated one`
+    );
+  });
 
-test('the store listing names the services in the order the chain asks them', () => {
-  // A reader reading the list top to bottom should be reading the order a word
-  // actually travels in, so the claim "only when the ones before it had no
-  // answer" is checkable rather than decorative.
-  const chain = [
-    'Wiktionary',
-    'Wikimedia Commons',
-    'Free Dictionary API',
-    'Datamuse',
-    'Google',
-    'MyMemory',
-    'Bing'
-  ];
-  const positions = chain.map(service => listing.indexOf(`**${service}**`));
-
-  for (const [i, position] of positions.entries()) {
-    assert.ok(position > -1, `the store listing does not list ${chain[i]}`);
-    if (i > 0) {
-      assert.ok(
-        position > positions[i - 1],
-        `the store listing lists ${chain[i]} before ${chain[i - 1]}`
-      );
+  test(`${name} promises a Lookup of one word, not a translation of a passage`, () => {
+    // The phrase-translation path is gone, and the trigger does not appear for a
+    // multi-word selection at all, so a document promising it is describing a
+    // feature that no longer exists - and a reader who selects a sentence and
+    // gets no button has been told the wrong thing.
+    //
+    // The claims are listed as they were written rather than as a pattern. A
+    // pattern broad enough to catch them also catches the FAQ entry that asks
+    // whether sentences can be translated in order to answer "no", and a test
+    // that fails on a denial of the thing it wants is a test that gets deleted
+    // rather than fixed.
+    for (const promise of [
+      /select(?:ing)? any text/i,
+      /any text on any website/i,
+      /word or phrase/i,
+      /drag for phrases/i,
+      /5 words/i,
+      /100 characters/i,
+      /for longer passages/i,
+      /translate to \d+\+? languages instantly/i
+    ]) {
+      assert.doesNotMatch(document, promise, `${name} still promises: ${promise}`);
     }
-  }
-});
 
-test('the store listing says a fallback Translation is rougher than a curated one', () => {
-  // The chain returns one word where Wiktionary would have offered several to
-  // choose between, and ADR-0003 makes the choice between formal and colloquial
-  // the point. A reader who cannot tell a fallback answer from a curated one is
-  // being asked to trust a difference they were never shown.
-  assert.ok(
-    /rougher|fallback/i.test(listing),
-    'the store listing does not distinguish a fallback Translation from a curated one'
-  );
-});
+    // And the positive claim, because removing the old words is not the same as
+    // describing what the extension does. CONTEXT.md is explicit that a Lookup
+    // concerns exactly one headword, and this is where a reader meets that.
+    assert.match(
+      document,
+      /Lookup is about .{0,20}one word|Lookup of a single headword/i,
+      `${name} does not say that a Lookup is about a single word`
+    );
+  });
+
+  test(`${name} points a Chromium reader at this extension rather than a userscript`, () => {
+    // ADR-0004 retires the sibling userscript: it fetches from the page, so
+    // CORS applies and every replacement endpoint would have to serve
+    // `Access-Control-Allow-Origin`. Sending a reader to it as though it were a
+    // working alternative is the one thing worse than saying nothing.
+    assert.ok(
+      /archiv|retired|no longer/i.test(document),
+      `${name} does not say the userscript is archived`
+    );
+    assert.ok(
+      /wordglance-extension/i.test(document),
+      `${name} does not point a reader at this extension`
+    );
+  });
+}

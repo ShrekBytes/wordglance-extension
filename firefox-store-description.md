@@ -1,22 +1,25 @@
 **WordGlance** - Your instant dictionary and translation companion!
 
-Or get the [userscript version](https://github.com/ShrekBytes/WordGlance).
-
 **✨ What it does:**
 
 - **Dictionary**: Get definitions, examples, synonyms, and antonyms instantly
 - **Pronunciation**: Hear words read aloud with one tap, when audio is available
-- **Translation**: Translate to 40+ languages with one click
+- **Translation**: See the word's equivalents in your target language, with several to choose between
 - **Per-site control**: Turn WordGlance off on individual websites, right from the popup
 - **Mobile-friendly**: Works perfectly on both desktop and mobile
 - **Customizable**: Choose your preferred languages and settings
 
 **How to use:**
 
-1. Select any text on any website
+1. Select a single word on any website
 2. Click the 📖 icon that appears
 3. Get instant definitions and translations
 4. Click the ‹ › arrows to browse multiple results
+
+A Lookup is about one word. The 📖 icon appears for a single word — WordGlance
+does not translate a sentence, a phrase, or a passage. It shows that word's
+equivalents in your target language, so you can pick the formal or the colloquial
+one.
 
 **Supported Languages:**
 
@@ -52,7 +55,7 @@ Definitions, examples, synonyms and antonyms come from Wiktionary via the [kaikk
 
 **Browser Support:**
 
-This extension is designed specifically for Firefox. For Chrome, Edge, Safari, and other browsers, check out our [userscript version](https://github.com/ShrekBytes/WordGlance).
+This extension is designed specifically for Firefox. There is no Chromium version, and the [WordGlance userscript](https://github.com/ShrekBytes/WordGlance) that used to serve one is archived and no longer maintained — it fetches from the page, so every service WordGlance now uses would have to allow it explicitly. If you were using the userscript, come here.
 
 **Open Source:**
 

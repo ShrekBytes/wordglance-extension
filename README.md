@@ -1,21 +1,20 @@
 # WordGlance 📖
 
-> ⚠️ **Project Status: Paused**
->
-> Development of the WordGlance Firefox extension is currently paused. The free APIs this extension depends on for dictionary definitions and translations are no longer working reliably, so the extension may not function as expected right now.
->
-> Development will resume once suitable free APIs for translation, dictionary definitions, and related features are available again.
+Select a single word on any page and WordGlance explains it where you are — its
+Definitions, Examples, Synonyms, Antonyms, and its equivalents in your target
+language, without leaving the page you are reading.
 
-Get instant dictionary definitions and translations for any text on any website! Just select text and click the book icon.
-
-> **For Chrome, Edge, Safari, and other browsers**:  
-> Use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) — it works the same as the extension.
+> **Looking for Chrome, Edge, or Safari?**
+> There is no extension for Chromium-based browsers. The
+> [WordGlance userscript](https://github.com/ShrekBytes/WordGlance) that used to
+> serve them is archived and no longer maintained — a userscript fetches from the
+> page, so every service WordGlance now uses would have to allow it explicitly.
+> If that is the browser you have, this extension is not for you.
 >
-> **Why no extension for Chromium-based browsers?**  
+> **Why no extension for Chromium-based browsers?**
 > Cause… fu\*k Google.
 
-![Extension Badge](assets/icon_128.png) [![GreasyFork](https://img.shields.io/badge/GreasyFork-Userscript-4E9A06?style=for-the-badge&logo=greasyfork)](https://greasyfork.org/en/scripts/546617-wordglance-dictionary-translation-tooltip)
-[![Firefox](https://img.shields.io/badge/Firefox-Add--on-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)
+![Extension Badge](assets/icon_128.png) [![Firefox](https://img.shields.io/badge/Firefox-Add--on-orange?style=for-the-badge&logo=firefox)](https://addons.mozilla.org/firefox/addon/wordglance/)
 
 ![WordGlance Screenshot](/screenshots/dark.png)
 
@@ -36,9 +35,9 @@ Get instant dictionary definitions and translations for any text on any website!
 
 - **Dictionary**: Get definitions, examples, synonyms and antonyms
 - **Pronunciation**: Tap the 🔊 icon to hear a word read aloud, when audio is available
-- **Translation**: Translate to 40+ languages instantly
+- **Translation**: See the word's equivalents in your target language, with several to choose between
 - **Per-site control**: Turn WordGlance off on individual websites without disabling the whole extension
-- **Fast**: Smart caching for instant results
+- **Fast**: A dictionary inside the extension, so a common word is answered without a request leaving your machine
 - **Beautiful**: Clean interface with dark mode
 - **Mobile-friendly**: Optimized for both desktop and mobile devices
 - **Customizable**: Choose your languages and preferences
@@ -46,8 +45,6 @@ Get instant dictionary definitions and translations for any text on any website!
 ## How to install
 
 Requires Firefox 142 or later.
-
-### Firefox Extension Installation
 
 **Option 1 (Recommended):** [Install from Firefox Add-ons](https://addons.mozilla.org/firefox/addon/wordglance/)
 
@@ -59,15 +56,11 @@ Requires Firefox 142 or later.
 4. Click "Load Temporary Add-on"
 5. Select the `manifest.json` file from the downloaded folder
 
-### Alternative: Userscript Version
-
-If you prefer a userscript or use other browsers, check out the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) which works on Chrome, Edge, Safari, and other browsers.
-
 ## How to use
 
 ### Desktop & Mobile
 
-1. **Select text** - Highlight any word or phrase (double-tap on mobile, or long-press and drag)
+1. **Select a word** - Highlight a single word (double-tap on mobile, or long-press and drag)
 2. **Click the 📖 icon** - It appears near your selection
 3. **Browse results** - Click the ‹ › arrows to page through multiple definitions or translations
 4. **Adjust settings** - Click the extension icon in your toolbar → Settings
@@ -79,11 +72,10 @@ If you prefer a userscript or use other browsers, check out the [WordGlance User
 ### Tips
 
 - **Desktop**: Works with mouse selection, keyboard shortcuts, and double-click
-- **Mobile**: Double-tap to select words, or long-press and drag for phrases
-- Works best with **single words** for definitions
-- Selections are capped at **5 words / 100 characters** - for longer passages, use a dedicated translation tool
+- **Mobile**: Double-tap to select a word, or long-press and drag over it
+- A Lookup is about **one word**. The 📖 icon does not appear for a phrase or a sentence, and WordGlance never translates a passage — it shows that word's equivalents in your target language, not a rendering of what you selected
 - Press **Escape** to dismiss the tooltip
-- Supports **40+ languages** including Spanish, French, German, Chinese, Japanese, Arabic, and more
+- Supports **40+ target languages** including Spanish, French, German, Chinese, Japanese, Arabic, and more
 
 ## Settings
 
@@ -115,15 +107,17 @@ Click the extension icon to access settings:
 
 **A common word reaches nobody.** WordGlance ships its own English dictionary inside the extension — 19,555 of the commonest English words, covering 98.6% of the words you will meet in running text — so a common word is answered from the package without a request leaving your machine. Which services a word *does* reach depends on what it is missing — every one below is only contacted after the one before it came up empty:
 
-- **[Wiktionary](https://en.wiktionary.org/)** — every Translation. The word goes to its own page, which also carries the pronunciation recording.
-- **[Wikimedia Commons](https://commons.wikimedia.org/)** — only when you press the pronunciation button. It receives the recording's file name, not the word.
-- **[Free Dictionary API](https://freedictionaryapi.com/)** — only for a word the bundled dictionary has no entry for. It receives the word and the language you are reading it in.
-- **[Datamuse](https://api.datamuse.com/)** — only when neither of those has synonyms or antonyms to show. It receives the word.
-- **[Google](https://www.google.com/)** — only when Wiktionary lists no equivalent of your word in your target language. It receives the word and your language choice.
-- **[MyMemory](https://mymemory.translated.net/)** — only if Google doesn't answer.
-- **[Bing](https://www.bing.com/)** — only if neither Google nor MyMemory answers. It issues an anonymous session token, which WordGlance echoes back with your word. No sign-in and no cookie is involved.
+- **[Wiktionary](https://en.wiktionary.org/)** (`en.wiktionary.org`) — every Translation. The word goes to its own page, which also carries the pronunciation recording.
+- **[Wikimedia Commons](https://commons.wikimedia.org/)** (`commons.wikimedia.org`) — only when you press the pronunciation button. It receives the recording's file name, not the word.
+- **[Free Dictionary API](https://freedictionaryapi.com/)** (`freedictionaryapi.com`) — only for a word the bundled dictionary has no entry for. It receives the word and the language you are reading it in.
+- **[Datamuse](https://www.datamuse.com/)** (`api.datamuse.com`) — only when neither of those has synonyms or antonyms to show. It receives the word.
+- **[Google](https://translate.google.com/)** (`clients5.google.com`) — only when Wiktionary lists no equivalent of your word in your target language. It receives the word and your language choice.
+- **[MyMemory](https://mymemory.translated.net/)** (`api.mymemory.translated.net`) — only if Google doesn't answer.
+- **[Bing](https://www.bing.com/translator)** (`www.bing.com`) — only if neither Google nor MyMemory answers. It issues an anonymous session token, which WordGlance echoes back with your word. No sign-in and no cookie is involved.
 
-The last three are free machine-translation services, reached only for a word Wiktionary has no equivalent of, and each only when the one before it didn't answer. They are what stops a gap in Wiktionary's coverage from leaving the Translation Field empty. The last two answer with a single word where Wiktionary would have offered you several to choose between, so a Translation from one of them is a fallback, and a rougher one. `[Why they are there](docs/adr/0005-machine-translation-fallback-chain.md)` records the reasoning, including the terms those services impose on automated access.
+The host in backticks after each name is the one that actually receives your word, which is not always the one the name suggests. The last three are free machine-translation services, reached only for a word Wiktionary has no equivalent of, and each only when the one before it didn't answer. They are what stops a gap in Wiktionary's coverage from leaving the Translation Field empty. The last two answer with a single word where Wiktionary would have offered you several to choose between, so a Translation from one of them is a fallback, and a rougher one. `[Why they are there](docs/adr/0005-machine-translation-fallback-chain.md)` records the reasoning, including the terms those services impose on automated access.
+
+The same disclosure is in the extension's own settings, under **Where your word goes**, so you do not have to leave the browser to find it.
 
 Turning Definitions or Translations off in settings stops those requests entirely.
 
@@ -160,13 +154,13 @@ A: Yes, unless you've turned it off for that specific site in Settings.
 A: Click the extension icon → Settings → Choose your language.
 
 **Q: Why do some words show "Definition not found"?**  
-A: Very new words, slang, or technical terms might not be in the dictionary. Try synonyms or simpler terms.
+A: Nothing defines that word. A rare technical term, a name, or a very new coinage may be in none of the sources WordGlance asks — and "Definition not found" is a real answer, not a broken extension. "Connection error" is the other thing you can see, and it means the opposite: the request failed, so WordGlance does not yet know. Turning Definitions or Translations off in settings gives a third, which is deliberate.
 
 **Q: Does it slow down my browser?**  
 A: No! WordGlance is lightweight and only activates when you select text.
 
 **Q: Can I translate entire sentences?**  
-A: No. A Lookup is about one selected word, and the button only appears for a single word. WordGlance shows that word's equivalents in your target language, not a translation of your selection.
+A: No, and it is not a missing feature. A Lookup is about one selected word, and the 📖 button only appears for a single word. WordGlance shows that word's equivalents in your target language — so you can pick the formal or the colloquial one — not a translation of your selection.
 
 **Q: How do I disable it temporarily?**  
 A: Click the extension icon → toggle "Enable on This Site" off to disable WordGlance just for the site you're on (refresh the page after toggling). To turn it off everywhere, disable it from Firefox's Add-ons manager instead.
@@ -175,7 +169,7 @@ A: Click the extension icon → toggle "Enable on This Site" off to disable Word
 A: Partly. Definitions, examples, synonyms and antonyms for the 19,555 commonest English words are served from a dictionary bundled inside the extension, so those keep working with no connection. A rarer word, and every Translation, needs the internet.
 
 **Q: What browsers are supported?**  
-A: This extension is designed for Firefox. For Chrome, Edge, Safari, and other browsers, use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) instead.
+A: This extension is Firefox only, and only on version 142 or later. There is no Chromium version, and the [userscript](https://github.com/ShrekBytes/WordGlance) that used to serve Chrome, Edge and Safari is archived and no longer maintained — it fetches from the page, so every service WordGlance now uses would have to allow it explicitly.
 
 **Have a question, suggestion, or found a bug?** [Open an issue](https://github.com/ShrekBytes/wordglance-extension/issues) on GitHub and we'll help you out!
 
@@ -209,7 +203,7 @@ The extension uses browser storage for user preferences:
 - **Dictionary**: [Free Dictionary API](https://freedictionaryapi.com/) - words the bundle does not carry. Wiktionary content, CC BY-SA 4.0.
 - **Relations**: [Datamuse](https://api.datamuse.com/) - synonyms and antonyms, only when neither of the above has any
 - **Translation and pronunciation**: [Wiktionary](https://en.wiktionary.org/) - the word's equivalents in your target language, and the recording to play
-- **Translation fallbacks**, reached only when Wiktionary has no equivalent: [Google](https://www.google.com/), [MyMemory](https://mymemory.translated.net/), then [Bing](https://www.bing.com/) - see [ADR-0005](docs/adr/0005-machine-translation-fallback-chain.md)
+- **Translation fallbacks**, reached only when Wiktionary has no equivalent: Google (`clients5.google.com`), MyMemory (`api.mymemory.translated.net`), then Bing (`www.bing.com`) - see [ADR-0005](docs/adr/0005-machine-translation-fallback-chain.md)
 
 Only the selected word, a language code, and (for Bing) an anonymous session token are sent - see [Privacy & permissions](#privacy--permissions).
 

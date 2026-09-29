@@ -668,11 +668,12 @@ test('no headword carries the same Sense twice', { skip: !built }, () => {
   }
 });
 
-test('the packaged dictionary is in the release build', { skip: !built }, () => {
-  // The bundle is only the answer ADR-0002 promises if it ships. The release
-  // workflow zips an explicit file list, so an artefact that is committed but
-  // left out of that list fails in a published extension, silently, by falling
-  // back to the live provider for every word.
+// The `zip` command from the release workflow, as a list of the paths it packs.
+//
+// The command is continued with trailing backslashes, so it runs to the first
+// line that is not. Slicing to a fixed offset would silently start asserting
+// on a different step the day someone reformats the file above it.
+function releaseBuildFileList() {
   const workflow = fs.readFileSync(
     path.resolve(__dirname, '..', '.github', 'workflows', 'build-and-release-xpi.yml'),
     'utf8'
@@ -681,9 +682,6 @@ test('the packaged dictionary is in the release build', { skip: !built }, () => 
   const start = workflow.indexOf('zip -r');
   assert.ok(start > -1, 'the workflow still zips an explicit file list');
 
-  // The command is continued with trailing backslashes, so it runs to the first
-  // line that is not. Slicing to a fixed offset would silently start asserting
-  // on a different step the day someone reformats the file above it.
   const command = workflow
     .slice(start)
     .split('\n')
@@ -693,12 +691,55 @@ test('the packaged dictionary is in the release build', { skip: !built }, () => 
     }, [])
     .join('\n');
 
-  assert.match(
-    command,
-    /(^|\s)data(\s|$)/m,
+  return command
+    .split('\n')
+    .slice(1)
+    .flatMap(line => line.trim().replace(/\\$/, '').split(/\s+/))
+    .filter(path => path && path !== '\\');
+}
+
+test('the packaged dictionary is in the release build', { skip: !built }, () => {
+  // The bundle is only the answer ADR-0002 promises if it ships. The release
+  // workflow zips an explicit file list, so an artefact that is committed but
+  // left out of that list fails in a published extension, silently, by falling
+  // back to the live provider for every word.
+  const packed = releaseBuildFileList();
+
+  assert.ok(
+    packed.includes('data'),
     'the packaged dictionary is not in the XPI file list, so every Definition ' +
     'would fall through to the live provider in a published build'
   );
+});
+
+test('every file the manifest loads is in the release build', () => {
+  // The manifest is the one declaration of what the extension loads; the
+  // workflow's `zip` list is a second, hand-maintained declaration of what
+  // ships. `wiktionary.js` was in the first and not the second, and nothing
+  // caught it: the test above asks whether a directory is listed, and a missing
+  // script is not a missing directory.
+  //
+  // A build without it is an extension whose background script throws
+  // `WiktionaryUtils is not defined` on the first Translation - which is every
+  // Translation, and every pronunciation. It fails only in a browser, only for
+  // a reader, and only after install. See ADR-0006.
+  const packed = releaseBuildFileList();
+  const manifest = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '..', 'manifest.json'), 'utf8')
+  );
+
+  const loaded = [
+    ...manifest.background.scripts,
+    ...manifest.content_scripts.flatMap(content => content.js)
+  ];
+
+  for (const script of loaded) {
+    assert.ok(
+      packed.includes(script),
+      `${script} is loaded by the manifest but is not in the XPI file list, ` +
+      'so a published build cannot read it'
+    );
+  }
 });
 
 function readArtefact() {

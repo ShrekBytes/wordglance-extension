@@ -519,9 +519,19 @@ function translationSource(unasked) {
 
 // The alternatives the first provider ranked for a headword, best first.
 //
-// Its answer is an array whose dictionary block sits at a fixed position: the
-// headword, a null, and then the ranked alternatives, each of which is a list
-// whose own first element is the word.
+// Its answer is an array whose dictionary block sits at a fixed position, and
+// getting to the alternatives takes two steps: the block is wrapped in a
+// one-element array, and inside it the headword, a null and then the ranked
+// alternatives follow - each of which is a list whose own first element is the
+// word. So the alternatives are at `body[5][0][2]`.
+//
+// The wrapper is worth spelling out because it is the part that is easy to read
+// past. One level higher, `body[5][2]`, is the headword a second time rather
+// than a list, so the alternatives come back empty - and empty is
+// indistinguishable from a provider with nothing to offer, which is what sends
+// the Lookup on to a single-string provider that ADR-0005 says must never be
+// reached while a ranked one is available. Nothing errors; every reader simply
+// gets the rougher fallback for a word this provider could have ranked.
 //
 // The block also ends with metadata - the ranges the alternatives cover, the
 // headword again, two counts - and those are left out by not being lists of
@@ -531,7 +541,8 @@ function translationSource(unasked) {
 // it. A headword the provider has no dictionary entry for answers with no
 // block at all.
 function readRanked(body) {
-  const entry = Array.isArray(body) ? body[5] : null;
+  const block = Array.isArray(body) ? body[5] : null;
+  const entry = Array.isArray(block) ? block[0] : null;
   const ranked = entry && Array.isArray(entry[2]) ? entry[2] : [];
   return ranked
     .map(alternative => (Array.isArray(alternative) ? alternative[0] : ''))

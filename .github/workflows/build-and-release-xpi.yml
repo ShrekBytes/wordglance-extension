@@ -83,6 +83,7 @@ jobs:
             popup.js \
             shared-constants.js \
             shared-utilities.js \
+            wiktionary.js \
             assets \
             data
 

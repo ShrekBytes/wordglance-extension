@@ -13,9 +13,13 @@
 */
 
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const { createBackground, jsonResponse, notFound, unreadableBody, wikiPage } = require('./harness');
+
+const root = path.resolve(__dirname, '..');
 
 const DICTIONARY = 'freedictionaryapi.com';
 const THESAURUS = 'api.datamuse.com';
@@ -820,6 +824,13 @@ const hostOf = url => new URL(url).host;
 // the language it detected, and a dictionary block holding the headword and
 // then its ranked alternatives.
 //
+// The block is wrapped in a one-element array, which is the part that matters.
+// The alternatives sit at `body[5][0][2]`, not at `body[5][2]`, and a fixture
+// that omits the wrapper is a fixture that pins a parser reading the wrong
+// index: it passes, the provider never does. `RANKED_ALTERNATIVES_VERBATIM`
+// below is a response captured from the live endpoint, and it is here so that
+// cannot happen a second time.
+//
 // The block ends with metadata - the ranges the alternatives cover, the
 // headword again, two counts - which is what makes the position worth pinning
 // down. A reader that stopped one entry early would show a range as a word, and
@@ -832,11 +843,11 @@ function rankedResponse(headword, alternatives) {
     null,
     null,
     [
-      headword,
-      null,
       [
-        ...alternatives.map((word, i) => [word, null, true, false, [3 + i]]),
-        [[0, 6]],
+        headword,
+        null,
+        alternatives.map((word, i) => [word, null, true, false, [3 + i]]),
+        [[0, alternatives.length * 3]],
         headword,
         0,
         0
@@ -847,6 +858,37 @@ function rankedResponse(headword, alternatives) {
     [['en'], null, [1], ['en']]
   ]);
 }
+
+// A real response, captured verbatim from the provider and trimmed to nothing
+// that varies. Without it the ranked provider's parser is only ever checked
+// against a fixture, and a fixture cannot fail for the reason that matters:
+// the provider's shape having changed.
+const RANKED_ALTERNATIVES_VERBATIM = [
+  [
+    ['', '', null, null, 3, null, null, [[]], [[]]]
+  ],
+  null,
+  'en',
+  null,
+  null,
+  [
+    [
+      'xylophone',
+      null,
+      [
+        ['জাইলোফোন', null, true, false, [3], null, [[3]]],
+        ['জাইলফোন', null, true, false, [8]]
+      ],
+      [[0, 9]],
+      'xylophone',
+      0,
+      0
+    ]
+  ],
+  1,
+  [],
+  [['en'], null, [1], ['en']]
+];
 
 // A headword the ranked provider has no dictionary entry for. It answers
 // normally, with no dictionary block at all, which is a hop with nothing to
@@ -921,6 +963,36 @@ test('a headword with no Wiktionary equivalent falls through to the ranked provi
     new URL(background.networkUrls[1]).searchParams.get('tl'),
     'bn',
     'asked for the reader’s Target language'
+  );
+});
+
+test('the ranked provider’s own answer is read, captured from the live endpoint', async () => {
+  // The one test here that does not build its own fixture. Every other test in
+  // this section describes the provider from the outside, and a description is
+  // only as good as whoever wrote it: the block is wrapped in a one-element
+  // array, the alternatives are two levels down, and a parser reading one level
+  // up still passes every fixture in this file while returning nothing at all
+  // for every reader in a browser.
+  //
+  // This response was captured from the endpoint itself. It is the test that
+  // would have caught it, and it is why the capture is committed rather than
+  // the shape being described.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({ ranked: jsonResponse(RANKED_ALTERNATIVES_VERBATIM) })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'xylophone' });
+
+  assert.deepEqual(
+    response.data.translations,
+    ['জাইলোফোন', 'জাইলফোন'],
+    'both ranked alternatives, best first - the provider ranks them, we do not'
+  );
+  assert.deepEqual(
+    background.networkUrls.map(hostOf),
+    [WIKTIONARY, RANKED],
+    'the ranked provider answered, so no single-string provider was consulted'
   );
 });
 
@@ -1295,6 +1367,70 @@ test('no cookie rides along with a word the reader selected', async () => {
     0,
     'no request to any provider carried a credential'
   );
+});
+
+test('no request to any service carries a credential of any kind', async () => {
+  // The constraint issue #14 puts out of scope is "any API key, account, or
+  // credential of any kind", and it is the reason the extension asks for no
+  // setup: it has to keep working with a fresh profile and no configuration.
+  //
+  // The chain test above covers the Translation side, where a session token is
+  // the obvious place for one to appear. This covers the other side, which is
+  // where a key would be far easier to add without noticing: a reader who
+  // installed from a store listing promising no account is entitled to that
+  // promise being kept, and nothing in a payload says whether it is.
+  const background = createBackground({
+    dictionary: {},
+    ...READS_BENGLA,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return HAS_XYLOPHONE();
+      if (url.includes(THESAURUS)) return thesaurusWords('marimba');
+      return chainNetwork({
+        session: wikiPage(VENDOR_SESSION_PAGE),
+        vendor: jsonResponse(VENDOR_WORD)
+      })(url);
+    }
+  });
+
+  // A Lookup that reaches every service: the live provider, the thesaurus, the
+  // Wiktionary page, the session page, and the vendor behind the token.
+  await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
+  await background.send({ type: 'GET_TRANSLATION', word: 'zzzqqq' });
+
+  assert.ok(background.networkUrls.length >= 4, 'the fixture reached every service');
+
+  for (const options of background.requestOptions) {
+    if (!options) continue;
+
+    assert.ok(
+      !options.credentials,
+      `a request to ${options.url} carried credentials`
+    );
+    assert.ok(
+      !options.headers || !('Authorization' in options.headers),
+      `a request to ${options.url} carried an Authorization header`
+    );
+  }
+});
+
+test('no endpoint is a URL that already holds a credential', async () => {
+  // A key baked into an endpoint constant is the same promise broken in a
+  // different place, and it is invisible in a payload: the request looks like
+  // any other. It is also the shape it would take if someone added a provider
+  // that demanded one, which is exactly the change a reader installing with no
+  // account would silently be unable to make.
+  const endpointSource = readFileSync(path.join(root, 'shared-constants.js'), 'utf8');
+
+  for (const url of endpointSource.match(/'https:\/\/[^']+'/g) || []) {
+    const { searchParams } = new URL(url.slice(1, -1));
+    for (const name of searchParams.keys()) {
+      assert.doesNotMatch(
+        name,
+        /^(api[-_]?key|key|token|access[-_]?token|client[-_]?secret|auth|sig|signature)$/i,
+        `an endpoint carries a "${name}" parameter, which is a credential in a URL`
+      );
+    }
+  }
 });
 
 test('the ranked provider is asked in the reader’s Source language when they named one', async () => {

@@ -98,8 +98,51 @@
             </label>
           </div>
         </div>
+        <details class="disclosure" id="disclosure">
+          <summary class="disclosure-summary">Where your word goes, and where the data comes from</summary>
+          <div class="disclosure-body">
+            <p>
+              The word you select is the only thing that leaves your browser. No account, no
+              analytics, no cookies, and nothing about you stored anywhere but this machine.
+              WordGlance runs no servers of its own and logs nothing.
+            </p>
+            <p>
+              A common English word reaches nobody at all: definitions, examples, synonyms and
+              antonyms for the 19,555 commonest English words are served from a dictionary bundled
+              inside the extension. Which services a word <em>does</em> reach depends on what it is
+              missing — each is contacted only after the one before it came up empty.
+            </p>
+            <ol class="disclosure-chain">
+              <li><span class="disclosure-service">Wiktionary</span> <span class="disclosure-host">en.wiktionary.org</span> — every Translation, for the word's equivalents in your target language, and its pronunciation</li>
+              <li><span class="disclosure-service">Wikimedia Commons</span> <span class="disclosure-host">commons.wikimedia.org</span> — only when you press the pronunciation button, for the recording's file name</li>
+              <li><span class="disclosure-service">Free Dictionary API</span> <span class="disclosure-host">freedictionaryapi.com</span> — only for a word the bundled dictionary does not carry</li>
+              <li><span class="disclosure-service">Datamuse</span> <span class="disclosure-host">api.datamuse.com</span> — only when neither has synonyms or antonyms to show</li>
+              <li><span class="disclosure-service">Google</span> <span class="disclosure-host">clients5.google.com</span> — only when Wiktionary lists no equivalent of your word in your target language</li>
+              <li><span class="disclosure-service">MyMemory</span> <span class="disclosure-host">api.mymemory.translated.net</span> — only if Google doesn't answer</li>
+              <li><span class="disclosure-service">Bing</span> <span class="disclosure-host">www.bing.com</span> — only if neither Google nor MyMemory answers. It issues an anonymous session token, which WordGlance echoes back with your word. No sign-in and no cookie is involved</li>
+            </ol>
+            <p>
+              The last three are free machine-translation fallbacks, reached only for a word
+              Wiktionary has no equivalent of. MyMemory and Bing answer with a single word where
+              Wiktionary would have offered you several to choose between, so a Translation from
+              either one is a fallback, and a rougher one.
+            </p>
+            <p>
+              Turning Definitions or Translations off above stops those requests entirely.
+            </p>
+            <p class="disclosure-attribution">
+              <strong>Attribution.</strong> Definitions, examples, synonyms and antonyms come from
+              Wiktionary via the <a href="https://kaikki.org/dictionary/English/" target="_blank" rel="noopener noreferrer">kaikki.org</a>
+              extraction, with <a href="https://github.com/tatuylonen/wiktextract" target="_blank" rel="noopener noreferrer">wiktextract</a>,
+              under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>.
+              Translations and pronunciation audio come from Wiktionary and Wikimedia Commons, under
+              the same licence. Relations, where a dictionary entry carries none, come from
+              <a href="https://www.datamuse.com/" target="_blank" rel="noopener noreferrer">Datamuse</a>.
+            </p>
+          </div>
+        </details>
         <div class="credit-section">
-          <a href="https://github.com/ShrekBytes/WordGlance/issues" target="_blank" class="help-link">Need help?</a>
+          <a href="https://github.com/ShrekBytes/wordglance-extension/issues" target="_blank" class="help-link">Need help?</a>
           <div class="credit-text">
             Made by
             <a href="https://github.com/ShrekBytes/WordGlance" target="_blank" class="credit-link">

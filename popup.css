@@ -56,6 +56,29 @@ body.dark-page { background:#1a1a1a; }
 
 .credit-section { border-top:1px solid #e0e0e0; padding-top:14px; margin-top:10px; text-align:center; }
 .wordglance-settings.dark-mode .credit-section { border-top-color:#444; }
+
+/* The disclosure a share-alike licence obliges us to show, and the one issue #14
+   asks to be reachable without leaving the browser. Collapsed by default: a
+   reader who did not come looking for it should not pay twenty lines of popup
+   for it, and a reader who did can find it in one click. */
+.disclosure { border-top:1px solid #e0e0e0; margin-top:10px; padding-top:10px; }
+.wordglance-settings.dark-mode .disclosure { border-top-color:#444; }
+.disclosure-summary { font-size:12px; color:#7f8c8d; cursor:pointer; text-align:center; }
+.wordglance-settings.dark-mode .disclosure-summary { color:#ccc; }
+.disclosure-summary:hover { color:#3498db; }
+.wordglance-settings.dark-mode .disclosure-summary:hover { color:#85c1e9; }
+.disclosure-body { font-size:11px; line-height:1.5; color:#5d6d7e; margin-top:10px; }
+.wordglance-settings.dark-mode .disclosure-body { color:#bbb; }
+.disclosure-body p { margin:0 0 8px; }
+.disclosure-chain { margin:0 0 8px; padding-left:18px; }
+.disclosure-chain li { margin-bottom:5px; }
+.disclosure-service { font-weight:600; }
+.disclosure-host { color:#95a5a6; }
+.wordglance-settings.dark-mode .disclosure-host { color:#888; }
+.disclosure-attribution { border-top:1px solid #ecf0f1; padding-top:8px; }
+.wordglance-settings.dark-mode .disclosure-attribution { border-top-color:#444; }
+.disclosure-body a { color:#3498db; }
+.wordglance-settings.dark-mode .disclosure-body a { color:#5dade2; }
 .help-link { display:block; margin-bottom:8px; color:#3498db; text-decoration:none; font-size:14px; }
 .help-link:hover { color:#2980b9; }
 .wordglance-settings.dark-mode .help-link { color:#5dade2; }

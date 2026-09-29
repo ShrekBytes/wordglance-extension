@@ -17,7 +17,7 @@ One of the parallel kinds of information a Lookup returns about a headword: Defi
 _Avoid_: Section, tab, result type
 
 **Sense**:
-One of the distinct meanings a headword has. A Lookup returns several Senses in dictionary order, and each Sense carries its own Definitions, Examples, Synonyms and Antonyms. Those belong to the Sense — never to the headword as a whole, because a word's synonyms are usually only true of one of its meanings.
+One of the distinct meanings a headword has. A Lookup returns several Senses in dictionary order, and each Sense carries its own Definitions, Examples, Synonyms and Antonyms. Those belong to the Sense — never to the headword as a whole, because a word's synonyms are usually only true of one of its meanings. A Sense may carry **sub-senses** — narrower meanings under it, as a noun sense has one for each of its kinds — and a sub-sense is a Sense in its own right, returned alongside the Sense it sits under.
 _Avoid_: Meaning (too vague), sub-entry, definition number
 
 **Definition**:

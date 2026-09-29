@@ -1122,14 +1122,7 @@
             pronunciation = defResponse.data.audio;
           } else {
             defSlider.textContent = '';
-            if (defResponse.error === ERROR_MESSAGES.SOURCE_NOT_ENGLISH) {
-              const infoPage = createElement('div', 'content-page');
-              infoPage.appendChild(createElement('div', 'info',
-                `${ERROR_MESSAGES.SOURCE_NOT_ENGLISH}. Please select English as the source language.`));
-              defSlider.appendChild(infoPage);
-            } else {
-              defSlider.appendChild(createContentPage(defResponse.error, true));
-            }
+            defSlider.appendChild(createContentPage(defResponse.error, true));
             renderSynAnt([], []);
           }
 

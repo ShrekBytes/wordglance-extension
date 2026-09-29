@@ -15,9 +15,10 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { createBackground, jsonResponse, notFound, wikiPage } = require('./harness');
+const { createBackground, jsonResponse, notFound, unreadableBody, wikiPage } = require('./harness');
 
-const DICTIONARY = 'api.dictionaryapi.dev';
+const DICTIONARY = 'freedictionaryapi.com';
+const THESAURUS = 'api.datamuse.com';
 const WIKTIONARY = 'en.wiktionary.org';
 
 const SETTINGS_KEYS = {
@@ -27,28 +28,89 @@ const SETTINGS_KEYS = {
   targetLanguage: 'wordglance-target-language'
 };
 
-const dictionaryEntry = (word, overrides = {}) => jsonResponse([
-  {
-    word,
-    phonetics: [{ audio: '' }],
-    meanings: [
-      {
-        partOfSpeech: 'noun',
-        definitions: [
-          {
-            definition: 'A thing made or used for a particular purpose.',
-            example: 'She packed her tools.',
-            synonyms: ['instrument', 'utensil'],
-            antonyms: []
-          }
-        ],
-        synonyms: ['device'],
-        antonyms: ['person']
-      }
-    ],
-    ...overrides
+// --- The live dictionary provider ------------------------------------------
+
+// A response from the live provider, in the shape it serves: the word asked
+// about, the Entries it has for it, and the source the data came from with the
+// licence it may be used under. The licence travels with every response; the
+// credit it obliges is static text in the settings, so nothing reads it here.
+const dictionaryResponse = (word, entries) => jsonResponse({
+  word,
+  entries: entries || [],
+  source: {
+    url: `https://en.wiktionary.org/wiki/${word}`,
+    license: { name: 'CC BY-SA 4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/' }
   }
+});
+
+// One Entry: the part of speech its Senses share, and the relations of the
+// headword as a whole. The Entry's own synonym and antonym lists are never
+// surfaced - ADR-0002 forbids it - so a fixture that needs them passes them in
+// `overrides` deliberately.
+const dictionaryEntry = (partOfSpeech, senses, overrides) => ({
+  language: { code: 'en', name: 'English' },
+  partOfSpeech,
+  pronunciations: [],
+  forms: [],
+  senses: senses || [],
+  synonyms: [],
+  antonyms: [],
+  ...overrides
+});
+
+// One Sense, reduced to what the Tooltip reads. Its Examples, Synonyms and
+// Antonyms belong to this Sense rather than to the headword.
+const dictionarySense = (definition, overrides) => ({
+  definition,
+  tags: [],
+  examples: [],
+  quotes: [],
+  synonyms: [],
+  antonyms: [],
+  subsenses: [],
+  ...overrides
+});
+
+// The provider has a headword, and its first Sense carries all four Fields.
+const HAS_HAMMER = () => dictionaryResponse('hammer', [
+  dictionaryEntry('noun', [
+    dictionarySense('A tool with a heavy head and a handle used for pounding.', {
+      examples: ['She packed her tools.'],
+      synonyms: ['instrument', 'utensil'],
+      antonyms: ['person']
+    })
+  ])
 ]);
+
+// A headword outside the bundle's cut-off, which the provider has a Definition
+// for and no relations for. That is the headword the thesaurus is there for.
+const HAS_XYLOPHONE = () => dictionaryResponse('xylophone', [
+  dictionaryEntry('noun', [
+    dictionarySense('A musical instrument of graduated wooden slats.', {
+      examples: ['She plays the xylophone.']
+    })
+  ])
+]);
+
+// A Bengali headword, which the provider answers in Bengali: this is what
+// makes a Definition in the reader's own language possible at all.
+const BN_JOL = () => dictionaryResponse('জল', [
+  dictionaryEntry('noun', [
+    dictionarySense('পানি', {
+      examples: ['এক গ্লাস জল খান।'],
+      synonyms: ['বারি', 'সলিল'],
+      antonyms: []
+    }),
+    dictionarySense('জলের রস', { examples: [], synonyms: ['রস'], antonyms: [] })
+  ], { language: { code: 'bn', name: 'Bengali' } })
+]);
+
+// The thesaurus's answer for one relation: the words it found, ranked.
+const thesaurusWords = (...words) => jsonResponse(words.map(word => ({ word, score: 1000 })));
+
+// Which relation a thesaurus request is asking for. The two relations are two
+// requests, and asking for both at once would be one constraint, not two.
+const relationOf = url => new URL(url).searchParams.get('rel_syn') ? 'rel_syn' : 'rel_ant';
 
 // The bundled dictionary is empty for every test in this section: each is about
 // the live provider, and a headword the bundle happens to carry would answer
@@ -122,17 +184,10 @@ const READS_BENGLA = { storage: { [SETTINGS_KEYS.targetLanguage]: 'bn' } };
 
 // --- Current behaviour ---------------------------------------------------
 
-test('a single-word Lookup returns Definitions, Synonyms, Antonyms and audio', async () => {
+test('a single-word Lookup returns Definitions, Synonyms and Antonyms', async () => {
   const background = createBackground({
     ...NO_BUNDLE,
-    fetch: url => {
-      if (url.includes(DICTIONARY)) {
-        return dictionaryEntry('hammer', {
-          phonetics: [{ audio: '//audio.example/hammer.mp3' }]
-        });
-      }
-      return undefined;
-    }
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'Hammer' });
@@ -141,35 +196,35 @@ test('a single-word Lookup returns Definitions, Synonyms, Antonyms and audio', a
   assert.deepEqual(response.data, {
     defs: [
       {
-        definition: 'A thing made or used for a particular purpose.',
+        definition: 'A tool with a heavy head and a handle used for pounding.',
         partOfSpeech: 'noun',
         example: 'She packed her tools.'
       }
     ],
-    synonyms: ['device', 'instrument', 'utensil'],
+    synonyms: ['instrument', 'utensil'],
     antonyms: ['person'],
-    audio: 'https://audio.example/hammer.mp3'
+    // The provider serves pronunciation as a phonetic transcription and carries
+    // no recording, so this Field is empty. A recording comes off the Wiktionary
+    // page the Translation Field is read from.
+    audio: ''
   });
   assert.deepEqual(background.networkUrls, [
-    `https://api.dictionaryapi.dev/api/v2/entries/en/hammer`
+    'https://freedictionaryapi.com/api/v1/entries/en/hammer'
   ]);
 });
 
 test('Definitions and Examples are capped at the configured limits', async () => {
-  const definitions = Array.from({ length: 12 }, (_, i) => ({
-    definition: `Meaning ${i}.`,
-    example: `Example ${i}.`
+  const senses = Array.from({ length: 12 }, (_, i) => dictionarySense(`Meaning ${i}.`, {
+    examples: [`Example ${i}.`],
+    synonyms: Array.from({ length: 10 }, (__, j) => `syn${i}-${j}`),
+    antonyms: Array.from({ length: 10 }, (__, j) => `ant${i}-${j}`)
   }));
-  const synonyms = Array.from({ length: 10 }, (_, i) => `syn${i}`);
-  const antonyms = Array.from({ length: 10 }, (_, i) => `ant${i}`);
 
   const background = createBackground({
     ...NO_BUNDLE,
-    fetch: url => (url.includes(DICTIONARY) ? jsonResponse([{
-      word: 'tool',
-      phonetics: [],
-      meanings: [{ partOfSpeech: 'noun', definitions, synonyms, antonyms }]
-    }]) : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? dictionaryResponse('tool', [
+      dictionaryEntry('noun', senses)
+    ]) : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'tool' });
@@ -182,7 +237,7 @@ test('Definitions and Examples are capped at the configured limits', async () =>
 test('a repeated Lookup of the same word issues no further request', async () => {
   const background = createBackground({
     ...NO_BUNDLE,
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('hammer') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   const first = await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
@@ -193,9 +248,39 @@ test('a repeated Lookup of the same word issues no further request', async () =>
   assert.equal(background.networkUrls.length, 1);
 });
 
-test('a word with no entry reports not-found rather than a connection error', async () => {
+test('a word the provider has no entry for is a not-found, not a connection error', async () => {
+  // The provider signals an unknown word with a successful response carrying no
+  // entries rather than with a 404, which is why an empty answer is read as this
+  // word having no entry and not as a failure: the two are different facts, and
+  // a reader told the network is down when it is up is worse off than one told
+  // nothing.
   const background = createBackground({
-    fetch: url => (url.includes(DICTIONARY) ? notFound() : undefined)
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return dictionaryResponse('zzzqqq', []);
+      if (url.includes(THESAURUS)) return thesaurusWords();
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'zzzqqq' });
+
+  assert.deepEqual(response, { success: false, error: 'Definition not found' });
+  assert.notEqual(
+    response.error,
+    'Connection error - please try again',
+    'the two must not collapse into one message'
+  );
+});
+
+test('a 404 from the provider is the same not-found', async () => {
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return notFound();
+      if (url.includes(THESAURUS)) return thesaurusWords();
+      return undefined;
+    }
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'zzzqqq' });
@@ -218,12 +303,27 @@ test('a failed request reports a connection error', async () => {
     success: false,
     error: 'Connection error - please try again'
   });
+  assert.deepEqual(background.networkUrls.length, 1, 'a failure ends the Lookup there');
 });
 
 test('a server failure is a connection error, not a not-found', async () => {
   const background = createBackground({
     ...NO_BUNDLE,
     fetch: url => (url.includes(DICTIONARY) ? jsonResponse({ error: 'boom' }, 500) : undefined)
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
+
+  assert.equal(response.error, 'Connection error - please try again');
+});
+
+test('a response the extension cannot read is a connection error', async () => {
+  // An outage page served with a healthy status is a request that returned
+  // nothing usable, and reporting it as a not-found would tell a reader their
+  // word has no entry when the extension never got to ask.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => (url.includes(DICTIONARY) ? unreadableBody() : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
@@ -700,21 +800,10 @@ test('Definitions are refused when the feature is off', async () => {
   assert.deepEqual(background.requestedUrls, []);
 });
 
-test('Definitions are refused when the source language is not English', async () => {
-  const background = createBackground({
-    storage: { [SETTINGS_KEYS.sourceLanguage]: 'bn' }
-  });
-
-  const response = await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
-
-  assert.equal(response.error, 'Definitions are only available for English words');
-  assert.deepEqual(background.requestedUrls, []);
-});
-
 test('clearing the cache makes the next Lookup request again', async () => {
   const background = createBackground({
     ...NO_BUNDLE,
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('hammer') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
@@ -729,7 +818,7 @@ test('clearing the translation cache leaves definitions cached', async () => {
   const background = createBackground({
     ...NO_BUNDLE,
     fetch: url => {
-      if (url.includes(DICTIONARY)) return dictionaryEntry('hammer');
+      if (url.includes(DICTIONARY)) return HAS_HAMMER();
       if (url.includes(WIKTIONARY)) {
         return wikiPage(wiktionaryPage({ rows: [BENGALI_ROW] }));
       }
@@ -768,7 +857,7 @@ test('an unknown message type is reported, not thrown', async () => {
 test('a single-word selection is accepted', async () => {
   const background = createBackground({
     ...NO_BUNDLE,
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('hammer') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: '  hammer  ' });
@@ -795,14 +884,15 @@ test('a non-English headword is still looked up', async () => {
   // fires for a non-Latin word too. A predicate that only accepted [a-z] would
   // reject it here, before any provider had a chance to answer.
   const background = createBackground({
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('জল') : undefined)
+    ...NO_BUNDLE,
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'জল' });
 
   assert.equal(response.success, true);
   assert.deepEqual(background.networkUrls, [
-    `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent('জল')}`
+    `https://freedictionaryapi.com/api/v1/entries/en/${encodeURIComponent('জল')}`
   ]);
 });
 
@@ -851,13 +941,18 @@ test('a single-word selection with no entry is still asked for', async () => {
   // The distinction from the case above: a rare single word is a not-found, and
   // it must reach the provider, because the bundle missing is the design.
   const background = createBackground({
-    fetch: url => (url.includes(DICTIONARY) ? notFound() : undefined)
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return dictionaryResponse('zzzqqq', []);
+      if (url.includes(THESAURUS)) return thesaurusWords();
+      return undefined;
+    }
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'zzzqqq' });
 
   assert.equal(response.error, 'Definition not found');
-  assert.equal(background.networkUrls.length, 1);
+  assert.equal(background.networkUrls.length, 3, 'the provider, then both relations');
 });
 
 // --- The bundled dictionary -----------------------------------------------
@@ -939,17 +1034,22 @@ test('the bundle is read once and held, so a repeated Lookup costs nothing', asy
 });
 
 test('a headword the bundle does not carry reaches the live provider', async () => {
+  // 'xylophone' is outside the bundle's cut-off, which is the whole point of
+  // the provider: a word a reader actually looks up and the package cannot
+  // answer must still be answered. Its Senses carry no relations, so the
+  // thesaurus is asked as well - the two requests come after the provider's.
   const background = createBackground({
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('xylophone') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_XYLOPHONE() : thesaurusWords('marimba'))
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
 
   assert.equal(response.success, true);
-  assert.deepEqual(background.networkUrls, [
-    'https://api.dictionaryapi.dev/api/v2/entries/en/xylophone'
-  ]);
-  assert.equal(response.data.defs[0].definition, 'A thing made or used for a particular purpose.');
+  assert.deepEqual(
+    background.networkUrls.filter(url => url.includes(DICTIONARY)),
+    ['https://freedictionaryapi.com/api/v1/entries/en/xylophone']
+  );
+  assert.equal(response.data.defs[0].definition, 'A musical instrument of graduated wooden slats.');
 });
 
 test('a bundled word is answered in any case, from one entry', async () => {
@@ -991,13 +1091,13 @@ test('the bundle answers before the persisted cache', async () => {
   // is built around, so it is the one that answers.
   const background = createBackground({
     ...NO_BUNDLE,
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('happy') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
   await background.send({ type: 'GET_DEFINITION', word: 'happy' });
   await background.send({ type: 'CLEAR_CACHE' });
 
   const withBundle = createBackground({
-    storage: { 'wordglance-cache-definitions': JSON.stringify({ happy: { defs: [], synonyms: [], antonyms: [], audio: 'cached' } }) },
+    storage: { 'wordglance-cache-definitions': JSON.stringify({ 'happy::en': { defs: [], synonyms: [], antonyms: [], audio: 'cached' } }) },
     fetch: () => notFound()
   });
 
@@ -1025,20 +1125,20 @@ test('a packaged dictionary that cannot be read falls through to the provider', 
   // which is what a reader would see if the file were not in the XPI.
   const background = createBackground({
     dictionary: false,
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('happy') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
 
   assert.equal(response.success, true);
-  assert.equal(response.data.defs[0].definition, 'A thing made or used for a particular purpose.');
+  assert.equal(response.data.defs[0].definition, 'A tool with a heavy head and a handle used for pounding.');
   assert.equal(background.networkUrls.length, 1);
 });
 
 test('a corrupt packaged dictionary falls through to the provider', async () => {
   const background = createBackground({
     dictionary: 'not the shape the generator writes',
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('happy') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
@@ -1054,11 +1154,11 @@ test('a failed packaged read is not retried, because it cannot succeed later', a
   // is the expensive way to be sure.
   const background = createBackground({
     dictionary: false,
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('happy') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   await background.send({ type: 'GET_DEFINITION', word: 'happy' });
-  await background.send({ type: 'GET_DEFINITION', word: 'walked' });
+  await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
 
   assert.equal(
     background.requestedUrls.filter(url => url === background.bundleUrl).length,
@@ -1225,12 +1325,12 @@ test('an entry with no Senses falls through to the provider', async () => {
   // keeps a defect in the data from becoming a word with no Definition at all.
   const background = createBackground({
     dictionary: { meta: META, entries: { happy: [] } },
-    fetch: url => (url.includes(DICTIONARY) ? dictionaryEntry('happy') : undefined)
+    fetch: url => (url.includes(DICTIONARY) ? HAS_HAMMER() : undefined)
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
 
-  assert.equal(response.data.defs[0].definition, 'A thing made or used for a particular purpose.');
+  assert.equal(response.data.defs[0].definition, 'A tool with a heavy head and a handle used for pounding.');
   assert.equal(background.networkUrls.length, 1);
 });
 
@@ -1247,15 +1347,427 @@ test('a bundled Lookup is still refused when Definitions are turned off', async 
   assert.deepEqual(background.requestedUrls, []);
 });
 
-test('a bundled Lookup is still refused when the Source language is not English', async () => {
-  // The bundle is English, so a reader who asked for Bengali Definitions has
-  // not been answered by it. Non-English Definitions are issue #18.
+// --- Coverage when the bundled dictionary misses ---------------------------
+
+// The rest of the chain, hop by hop. The bundle is covered above; this is the
+// live provider, the reader's own language, the thesaurus, and the Lookup every
+// source comes up empty for. A broken middle hop ships silently, so each one is
+// asserted on the Fields it answers and the requests it issues.
+
+// A reader who has named their Source language. Non-English Definitions are the
+// reason the message telling them Definitions were English-only is gone.
+const READS_BENGLA_SOURCE = { storage: { [SETTINGS_KEYS.sourceLanguage]: 'bn' } };
+
+// The provider's answer for the languages a headword is named in, and nothing
+// for the rest - which is what a language the provider has no entry for looks
+// like: a successful response carrying no entries.
+const perLanguage = answers => url => {
+  if (!url.includes(DICTIONARY)) return undefined;
+  const language = url.split('/entries/')[1].split('/')[0];
+  return answers[language] || dictionaryResponse('unknown', []);
+};
+
+test('a headword is asked of the provider in the reader’s Source language first', async () => {
   const background = createBackground({
-    storage: { 'wordglance-source-language': 'bn' }
+    ...NO_BUNDLE,
+    ...READS_BENGLA_SOURCE,
+    fetch: perLanguage({ bn: BN_JOL() })
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'জল' });
+
+  assert.equal(response.success, true);
+  assert.deepEqual(response.data.defs, [
+    { definition: 'পানি', partOfSpeech: 'noun', example: 'এক গ্লাস জল খান।' },
+    { definition: 'জলের রস', partOfSpeech: 'noun', example: '' }
+  ]);
+  assert.deepEqual(response.data.synonyms, ['বারি', 'সলিল', 'রস']);
+  assert.deepEqual(background.networkUrls, [
+    `https://freedictionaryapi.com/api/v1/entries/bn/${encodeURIComponent('জল')}`
+  ]);
+});
+
+test('English answers when the reader’s Source language has no entry', async () => {
+  // The fallback is what a reader gets rather than an error: they asked for a
+  // Bengali Definition of a word Bengali does not define, and English is
+  // something they can read.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    ...READS_BENGLA_SOURCE,
+    fetch: perLanguage({ en: HAS_HAMMER() })
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
+
+  assert.equal(response.success, true);
+  assert.equal(response.data.defs[0].definition, 'A tool with a heavy head and a handle used for pounding.');
+  assert.deepEqual(background.networkUrls, [
+    'https://freedictionaryapi.com/api/v1/entries/bn/hammer',
+    'https://freedictionaryapi.com/api/v1/entries/en/hammer'
+  ]);
+});
+
+test('the bundle answers the English fallback, not the reader’s Source language', async () => {
+  // The bundle holds English Senses, so it cannot answer a Bengali reader's
+  // question about a Bengali word. It answers the English end of the chain,
+  // which is what keeps a common word free for them too: one request, the one
+  // that found nothing in their own language.
+  const background = createBackground({
+    ...READS_BENGLA_SOURCE,
+    fetch: perLanguage({})
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
 
-  assert.equal(response.error, 'Definitions are only available for English words');
-  assert.deepEqual(background.requestedUrls, []);
+  assert.equal(response.success, true);
+  assert.ok(response.data.defs.length > 0);
+  assert.ok(response.data.synonyms.length > 0);
+  assert.deepEqual(background.networkUrls, [
+    'https://freedictionaryapi.com/api/v1/entries/bn/happy'
+  ]);
+});
+
+test('an auto-detected Source language is answered in English, once', async () => {
+  // 'auto' is a setting rather than a language, so it asks for English and
+  // nothing else: the same Lookup a reader who set English gets.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: perLanguage({ en: HAS_HAMMER() })
+  });
+
+  await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
+
+  assert.deepEqual(background.networkUrls, [
+    'https://freedictionaryapi.com/api/v1/entries/en/hammer'
+  ]);
+});
+
+test('a cached answer in one Source language is not served for another', async () => {
+  // The same headword is a different answer in the reader's Source language
+  // than in English, so one language's cached answer cannot stand in for the
+  // other's - a reader who changes their Source language would otherwise go on
+  // reading the previous language's Definition of the word.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    ...READS_BENGLA_SOURCE,
+    fetch: perLanguage({
+      bn: BN_JOL(),
+      hi: dictionaryResponse('जल', [dictionaryEntry('noun', [
+        dictionarySense('जल', { examples: ['एक गिलास पानी पिएँ।'], synonyms: ['पानी'] })
+      ], { language: { code: 'hi', name: 'Hindi' } })])
+    })
+  });
+
+  const bengali = await background.send({ type: 'GET_DEFINITION', word: 'জল' });
+  await background.change({ [SETTINGS_KEYS.sourceLanguage]: 'hi' });
+  const hindi = await background.send({ type: 'GET_DEFINITION', word: 'জল' });
+
+  assert.equal(bengali.data.defs[0].definition, 'পানি');
+  assert.equal(hindi.data.defs[0].definition, 'जल');
+  assert.deepEqual(background.networkUrls, [
+    `https://freedictionaryapi.com/api/v1/entries/bn/${encodeURIComponent('জল')}`,
+    `https://freedictionaryapi.com/api/v1/entries/hi/${encodeURIComponent('জল')}`
+  ]);
+});
+
+test('an Entry’s own synonym and antonym lists are never surfaced', async () => {
+  // The Entry's lists belong to the headword as a whole, which is a different
+  // fact from any Sense's: they are unsorted dumps that mix words belonging to
+  // different meanings, and a list of six is what a reader would be shown. The
+  // two are made to differ sharply here, and the Senses' own are a single word
+  // each - so an answer carrying the Entry's words could only have come from
+  // the Entry.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => (url.includes(DICTIONARY) ? dictionaryResponse('basin', [
+      dictionaryEntry('noun', [
+        dictionarySense('A wide bowl-shaped container.', { synonyms: ['dish'] }),
+        dictionarySense('A hollow in the ground holding water.', { antonyms: ['slope'] })
+      ], {
+        synonyms: ['washbasin', 'font', 'lavatory', 'tureen', 'plate', 'bowl'],
+        antonyms: ['mountain', 'ridge', 'summit', 'plateau', 'peak']
+      })
+    ]) : undefined)
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'basin' });
+
+  assert.deepEqual(response.data.synonyms, ['dish']);
+  assert.deepEqual(response.data.antonyms, ['slope']);
+  assert.equal(background.networkUrls.length, 1, 'the thesaurus was not needed');
+});
+
+test('a sub-sense is a Definition of its own', async () => {
+  // A Sense may carry sub-senses - a noun sense with one for each of its kinds
+  // - and a sub-sense is as much a distinct meaning of the headword as its
+  // parent is. Its Definition and its relations are the reader's.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => (url.includes(DICTIONARY) ? dictionaryResponse('light', [
+      dictionaryEntry('noun', [
+        dictionarySense('A source of illumination.', {
+          examples: ['Put that light out!'],
+          subsenses: [
+            dictionarySense('A lightbulb or similar light-emitting device.', {
+              examples: ['We turned off all the lights.'],
+              synonyms: ['bulb']
+            })
+          ]
+        })
+      ])
+    ]) : undefined)
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'light' });
+
+  assert.deepEqual(response.data.defs, [
+    { definition: 'A source of illumination.', partOfSpeech: 'noun', example: 'Put that light out!' },
+    { definition: 'A lightbulb or similar light-emitting device.', partOfSpeech: 'noun', example: 'We turned off all the lights.' }
+  ]);
+  assert.deepEqual(response.data.synonyms, ['bulb']);
+});
+
+test('a multi-word Synonym or Antonym from the provider is filtered out', async () => {
+  // The same rule at this source as at the bundle's: a Synonym is a bare word,
+  // and trimming a phrase to its first word would assert a synonym the source
+  // did not.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => (url.includes(DICTIONARY) ? dictionaryResponse('happy', [
+      dictionaryEntry('adjective', [
+        dictionarySense('Feeling well-being.', {
+          synonyms: ['happy as a lark', 'in\ngood spirits', 'cheerful'],
+          antonyms: ['down in the dumps', 'blue']
+        })
+      ])
+    ]) : undefined)
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  assert.deepEqual(response.data.synonyms, ['cheerful']);
+  assert.deepEqual(response.data.antonyms, ['blue']);
+});
+
+test('the thesaurus fills Synonyms and Antonyms when nothing else has them', async () => {
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return HAS_XYLOPHONE();
+      if (url.includes(THESAURUS)) {
+        return relationOf(url) === 'rel_syn'
+          ? thesaurusWords('marimba', 'glockenspiel')
+          : thesaurusWords('hydraulophone');
+      }
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
+
+  assert.deepEqual(response.data, {
+    defs: [{
+      definition: 'A musical instrument of graduated wooden slats.',
+      partOfSpeech: 'noun',
+      example: 'She plays the xylophone.'
+    }],
+    synonyms: ['marimba', 'glockenspiel'],
+    antonyms: ['hydraulophone'],
+    audio: ''
+  });
+  assert.deepEqual(background.networkUrls, [
+    'https://freedictionaryapi.com/api/v1/entries/en/xylophone',
+    'https://api.datamuse.com/words?rel_syn=xylophone&max=6',
+    'https://api.datamuse.com/words?rel_ant=xylophone&max=6'
+  ]);
+});
+
+test('the thesaurus supplies relations and nothing else', async () => {
+  // It has no Definitions and no Example sentences, so those two Fields can
+  // only ever have come from the bundle or the provider - even though the
+  // thesaurus was asked, and answered.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) {
+        return dictionaryResponse('xylophone', [
+          dictionaryEntry('noun', [
+            dictionarySense('A musical instrument of graduated wooden slats.', {
+              examples: ['She plays the xylophone.']
+            }),
+            dictionarySense('An instrument played by striking bars.', {
+              examples: ['The glockenspiel glinted.']
+            })
+          ])
+        ]);
+      }
+      if (url.includes(THESAURUS)) return thesaurusWords('marimba');
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
+
+  assert.equal(response.data.defs.length, 2, 'the provider’s two Senses');
+  assert.ok(response.data.defs.every(d => d.example), 'the provider’s Examples');
+  assert.ok(response.data.defs.every(d => !d.definition.includes('marimba')));
+});
+
+test('the thesaurus is not consulted when the provider has relations', async () => {
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return HAS_HAMMER();
+      throw new Error('the thesaurus is only reached when nothing else has the Fields');
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
+
+  assert.deepEqual(response.data.synonyms, ['instrument', 'utensil']);
+  assert.deepEqual(response.data.antonyms, ['person']);
+  assert.equal(background.networkUrls.length, 1);
+});
+
+test('the thesaurus is not consulted when the bundle answers', async () => {
+  const background = createBackground({
+    fetch: () => {
+      throw new Error('the bundle answers a common word, so no provider may be reached');
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  assert.equal(response.success, true);
+  assert.ok(response.data.synonyms.length > 0, 'the bundled Senses supplied the relations');
+  assert.deepEqual(background.networkUrls, []);
+});
+
+test('a thesaurus failure leaves the relations empty rather than failing the Lookup', async () => {
+  // The Definition and the Example have already resolved. A Field that could
+  // not be filled is empty rather than fatal, which is the same rule the
+  // Tooltip follows when one Field fails and the others stay visible - and the
+  // reason a thesaurus outage does not take away the answer the reader came for.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return HAS_XYLOPHONE();
+      if (url.includes(THESAURUS)) throw new Error('offline');
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
+
+  assert.equal(response.success, true);
+  assert.equal(response.data.defs.length, 1);
+  assert.deepEqual(response.data.synonyms, []);
+  assert.deepEqual(response.data.antonyms, []);
+});
+
+test('a thesaurus that answers one relation and fails the other keeps the one it has', async () => {
+  // Two Fields and two requests: neither failure may take the other's answer
+  // with it, or a reader who selected a word the thesaurus half knows loses the
+  // half it does.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return HAS_XYLOPHONE();
+      if (url.includes(THESAURUS)) {
+        return relationOf(url) === 'rel_syn' ? thesaurusWords('marimba') : notFound();
+      }
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
+
+  assert.equal(response.success, true);
+  assert.deepEqual(response.data.synonyms, ['marimba']);
+  assert.deepEqual(response.data.antonyms, []);
+});
+
+test('a multi-word expression from the thesaurus is filtered out', async () => {
+  // Its vocabulary holds multiword expressions as well as words, so the same
+  // rule applies here as at every other source: a Synonym is a bare word.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return HAS_XYLOPHONE();
+      if (url.includes(THESAURUS)) return thesaurusWords('glockenspiel', 'vibraphone', 'one hand band');
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'xylophone' });
+
+  assert.deepEqual(response.data.synonyms, ['glockenspiel', 'vibraphone']);
+});
+
+test('relations beside an empty Definition list when no source has the headword', async () => {
+  // A piece of jargon or a product name: nothing defines it, but words related
+  // to it exist, and a reader who selected it is better served by the words
+  // around it than by nothing at all. The Tooltip prints its not-found for the
+  // empty Definition Field beside them.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return dictionaryResponse('zzzqqq', []);
+      if (url.includes(THESAURUS)) {
+        return relationOf(url) === 'rel_syn' ? thesaurusWords('valley', 'dale') : thesaurusWords();
+      }
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'zzzqqq' });
+
+  assert.equal(response.success, true);
+  assert.deepEqual(response.data, {
+    defs: [],
+    synonyms: ['valley', 'dale'],
+    antonyms: [],
+    audio: ''
+  });
+});
+
+test('the thesaurus’s answer is cached, so a repeated Lookup issues no further request', async () => {
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return dictionaryResponse('zzzqqq', []);
+      if (url.includes(THESAURUS)) return thesaurusWords('valley');
+      return undefined;
+    }
+  });
+
+  const first = await background.send({ type: 'GET_DEFINITION', word: 'zzzqqq' });
+  const second = await background.send({ type: 'GET_DEFINITION', word: 'zzzqqq' });
+
+  assert.deepEqual(second.data, first.data);
+  assert.equal(background.networkUrls.length, 3, 'nothing was asked of anybody the second time');
+});
+
+test('every source is asked before a headword is reported not-found', async () => {
+  // A not-found is only told once every source has been asked: reported early
+  // it would be a claim about the word that no source had checked yet.
+  const background = createBackground({
+    ...NO_BUNDLE,
+    ...READS_BENGLA_SOURCE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) return dictionaryResponse('cwm', []);
+      if (url.includes(THESAURUS)) return thesaurusWords();
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'cwm' });
+
+  assert.deepEqual(response, { success: false, error: 'Definition not found' });
+  assert.deepEqual(background.networkUrls, [
+    'https://freedictionaryapi.com/api/v1/entries/bn/cwm',
+    'https://freedictionaryapi.com/api/v1/entries/en/cwm',
+    'https://api.datamuse.com/words?rel_syn=cwm&max=6',
+    'https://api.datamuse.com/words?rel_ant=cwm&max=6'
+  ]);
 });

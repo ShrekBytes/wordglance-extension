@@ -44,7 +44,22 @@ const SETTINGS_SCHEMA = {
 // Named so the fetch call sites in background.js stay in sync with the host
 // permissions declared in manifest.json at a glance.
 const API_ENDPOINTS = {
-  DICTIONARY: 'https://api.dictionaryapi.dev/api/v2/entries/en/',
+  // The live dictionary provider, which covers the headwords the bundle's
+  // cut-off does not reach. A language code and the headword are appended
+  // after this.
+  //
+  // It signals an unknown word with a successful response carrying no entries
+  // rather than with a 404, which is what lets "this word has no entry" be
+  // told apart from "the request failed". See ADR-0002.
+  DICTIONARY: 'https://freedictionaryapi.com/api/v1/entries',
+  // The thesaurus, which fills Synonym and Antonym and nothing else, and only
+  // when the bundle and the live provider have come up with neither.
+  //
+  // A relation is asked for by its three-letter code behind a `rel_` prefix.
+  // The bare spellings - `syn`, `ant` - answer with an empty list for every
+  // word rather than with an error, so a chain built on them would look
+  // healthy and return nothing at all.
+  THESAURUS: 'https://api.datamuse.com/words',
   // The headword's Wiktionary page, read as raw markup. `action=raw` serves the
   // page's own source and answers 404 when there is no page at all, which is
   // what lets "this word has no equivalents in the reader's Target language" be
@@ -90,7 +105,6 @@ const ERROR_MESSAGES = {
   NO_TRANSLATION: 'Translation not found',
   NETWORK_ERROR: 'Connection error - please try again',
   INVALID_WORD: 'Please select a valid word to look up',
-  SOURCE_NOT_ENGLISH: 'Definitions are only available for English words',
   DEFINITIONS_DISABLED: 'Definitions are turned off in settings',
   TRANSLATIONS_DISABLED: 'Translations are turned off in settings'
 };

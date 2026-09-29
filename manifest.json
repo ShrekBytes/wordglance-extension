@@ -12,7 +12,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "https://api.dictionaryapi.dev/*",
+    "https://freedictionaryapi.com/*",
+    "https://api.datamuse.com/*",
     "https://en.wiktionary.org/*",
     "https://commons.wikimedia.org/*"
   ],

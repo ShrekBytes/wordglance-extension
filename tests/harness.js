@@ -39,6 +39,19 @@ function notFound() {
   return jsonResponse({ success: false, error: 'Not found' }, 404);
 }
 
+// A 200 carrying a body nobody can read, which is what an outage page behind a
+// healthy status looks like. Not a `Response`, because what matters here is that
+// reading the body is the thing that fails.
+function unreadableBody(status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      throw new SyntaxError('Unexpected token < in JSON at position 0');
+    }
+  };
+}
+
 // A page of raw markup, which is how a Wiktionary page is read: `action=raw`
 // serves text/x-wiki, not JSON. Not a real `Response` because nothing here
 // streams it.
@@ -151,7 +164,14 @@ function createBackground({ fetch: handler, storage = {}, dictionary } = {}) {
     browser: {
       storage: {
         local: store.local,
-        onChanged: noopEvent
+        // Captured rather than stubbed, so a test can change a setting the way
+        // the settings popup does - by writing to storage - and then see the
+        // background act on it.
+        onChanged: {
+          addListener(listener) {
+            context.__onChanged = listener;
+          }
+        }
       },
       runtime: {
         onMessage: {
@@ -199,6 +219,20 @@ function createBackground({ fetch: handler, storage = {}, dictionary } = {}) {
       ));
     },
     storage: store,
+    /**
+     * Changes a setting the way the settings popup does: the value is written
+     * to storage, and the background hears about it from the same
+     * `storage.onChanged` listener the browser delivers it through.
+     *
+     * @param {object} items storage key to new value, e.g. the Source language.
+     */
+    async change(items) {
+      await store.local.set(items);
+      const changes = Object.fromEntries(
+        Object.entries(items).map(([key, newValue]) => [key, { newValue }])
+      );
+      context.__onChanged(changes, 'local');
+    },
     /** The packaged dictionary's URL, as the background script spells it. */
     bundleUrl,
     /** URLs requested, in order. Grows as the test awaits `send`. */
@@ -217,4 +251,4 @@ function createBackground({ fetch: handler, storage = {}, dictionary } = {}) {
   };
 }
 
-module.exports = { createBackground, jsonResponse, notFound, wikiPage };
+module.exports = { createBackground, jsonResponse, notFound, unreadableBody, wikiPage };

@@ -168,30 +168,30 @@ const PART_OF_SPEECH = {
 
 const partOfSpeech = (pos) => PART_OF_SPEECH[pos] || pos || '';
 
-// The payload for a Lookup answered from the bundle, in the shape the content
-// script already renders, so a bundled Definition looks like any other.
+// The Fields of a Lookup, from the Senses that answer it, in the shape the
+// content script already renders, so that a Definition reads the same whichever
+// source it came from.
 //
-// Synonyms and Antonyms are the Senses' own, walked in dictionary order and
-// deduplicated. The artefact holds no entry-level list - each Sense carries its
-// own - so there is nothing to flatten, which is what makes the flattening
-// ADR-0002 forbids impossible here rather than merely avoided. What the payload
-// cannot express, because the Tooltip shows one list per Lookup rather than one
-// per Sense, is which Sense each of them came from; a reader on the second page
-// of Definitions is reading a list drawn from all of them.
-function bundlePayload(senses) {
+// Each Sense's Definitions are paired with the Sense's part of speech and its
+// first Example - the one a reader reads first - and the Senses' own relations
+// are gathered in encounter order, then deduplicated and capped, so the Tooltip
+// stays a readable size. A Sense that carries no Example still resolves its
+// Definitions: a Field may be empty, and empty is a normal outcome.
+//
+// Neither source carries a recording. The artefact has no audio at all, and the
+// provider serves a phonetic transcription rather than a file, so a recording
+// comes off the Wiktionary page the Translation Field is read from - and a
+// Lookup answered from either of them must not reach the network for one.
+function fieldsFrom(senses) {
   const defs = [];
   const synonyms = new Set();
   const antonyms = new Set();
 
   for (const sense of senses) {
-    // A Sense carries one Example and one or more Definitions. The payload
-    // pairs one Example with one Definition, so the Sense's Example goes with
-    // the first Definition it shows - the one a reader reads first, and today
-    // the only one, since the artefact budget is one Definition per Sense.
     const example = (sense.examples || [])[0] || '';
-    for (const definition of sense.definitions || []) {
-      if (!definition) continue;
-      defs.push({ definition, partOfSpeech: partOfSpeech(sense.pos), example });
+    for (const wording of sense.definitions || []) {
+      const definition = (wording || '').trim();
+      if (definition) defs.push({ definition, partOfSpeech: sense.partOfSpeech || '', example });
     }
     bareRelations(sense.synonyms).forEach(word => synonyms.add(word));
     bareRelations(sense.antonyms).forEach(word => antonyms.add(word));
@@ -201,12 +201,20 @@ function bundlePayload(senses) {
     defs: defs.slice(0, CONFIG.maxDefinitions),
     synonyms: Array.from(synonyms).slice(0, CONFIG.maxSynonyms),
     antonyms: Array.from(antonyms).slice(0, CONFIG.maxAntonyms),
-    // The bundle carries no audio, and a bundled Lookup must not touch the
-    // network, so it yields no recording of its own. Pronunciation comes off
-    // the Wiktionary page instead - the same page the Translation Field is read
-    // from, so asking for it costs nothing extra.
     audio: ''
   };
+}
+
+// The payload for a Lookup answered from the bundle. The artefact holds one
+// Definition per Sense - the budget its generator was given - and names a
+// Sense's part of speech `pos`, where it holds a Wiktionary tag rather than the
+// word the Tooltip prints. That is the one thing restated here.
+//
+// What the payload cannot express, because the Tooltip shows one list per Lookup
+// rather than one per Sense, is which Sense each relation came from; a reader on
+// the second page of Definitions is reading a list drawn from all of them.
+function bundlePayload(senses) {
+  return fieldsFrom(senses.map(sense => ({ ...sense, partOfSpeech: partOfSpeech(sense.pos) })));
 }
 
 // A Lookup is about one headword, so this is where a selection that is not one
@@ -218,98 +226,226 @@ function headwordKey(word) {
   return key;
 }
 
-async function fetchDefinition(word) {
-  const key = headwordKey(word);
+// Every Sense under an Entry, in the order the Entry lists them. A Sense may
+// carry sub-senses - a noun sense with one for each of its kinds - and a
+// sub-sense is as much a distinct meaning of the headword as its parent is, so
+// its Definition and its relations are the reader's as much as the parent's.
+function* allSenses(senses) {
+  for (const sense of Array.isArray(senses) ? senses : []) {
+    if (!sense) continue;
+    yield sense;
+    yield* allSenses(sense.subsenses);
+  }
+}
 
-  // The bundle answers before the cache and before the provider. It is in the
-  // package, it costs nothing, and it is the data this extension is built
-  // around, so where it has an answer that is the answer a reader gets.
-  //
+// The payload for a Lookup answered by the live provider.
+//
+// An Entry holds several Senses under one part of speech, and that part of
+// speech is the Entry's rather than any Sense's, so it is restated onto each of
+// them. A sub-sense is a Sense of its own, so it is restated as one - which is
+// the whole of the difference between this walk and the artefact's.
+//
+// Relations come from the Senses and never from the Entry. An Entry carries
+// synonym and antonym lists of its own, and those belong to the headword rather
+// than to any Sense: unsorted dumps that mix words belonging to different
+// meanings and include multi-word phrases. ADR-0002 forbids surfacing them for
+// the same reason the artefact carries no entry-level list.
+function providerPayload(entries) {
+  return fieldsFrom(entries.flatMap(entry => Array.from(allSenses(entry.senses), sense => ({
+    definitions: [sense.definition],
+    partOfSpeech: partOfSpeech(entry.partOfSpeech),
+    examples: sense.examples,
+    synonyms: sense.synonyms,
+    antonyms: sense.antonyms
+  }))));
+}
+
+// The languages a headword is asked of, in the order they are asked. English is
+// last and always present: it is the fallback for a Source language the provider
+// has no entry for, and it is where the bundle answers.
+//
+// 'auto' is a setting rather than a language, and 'en' is the language the
+// bundle is written in, so neither asks for anything but English.
+function definitionLanguages() {
+  return settings.sourceLanguage === 'auto' || settings.sourceLanguage === 'en'
+    ? ['en']
+    : [settings.sourceLanguage, 'en'];
+}
+
+// The cached answer for a headword, keyed by the languages the Lookup asks of
+// rather than by the headword alone. The same word is a different answer in the
+// reader's Source language than in English, so one cannot stand in for the other.
+function definitionCacheKey(key) {
+  return `${key}::${definitionLanguages().join('-')}`;
+}
+
+// Remembers a provider's answer, so a repeated Lookup of the same headword in
+// the same languages issues no request at all - the thesaurus's included, which
+// would otherwise be asked again for relations it has already supplied.
+//
+// A bundled answer is never remembered: it made no request, so caching it grows
+// extension storage for no saving, and it would put a second copy of the
+// artefact's words where a reader can clear it and get the provider's answer
+// back.
+function rememberDefinition(key, payload) {
+  caches.definitions.set(definitionCacheKey(key), payload);
+  saveCaches();
+}
+
+// The Fields for a headword from the bundled dictionary, or null when the
+// artefact does not carry it.
+async function fromBundle(key) {
+  const senses = (await loadBundle())[key];
   // An entry with no Senses is treated as a miss for the same reason: the
   // generator drops a headword it cannot answer, so one here is a defect, and a
   // Lookup that reached the provider is more useful than one that did not.
-  const bundled = (await loadBundle())[key];
-  if (bundled && bundled.length) return bundlePayload(bundled);
+  return senses && senses.length ? bundlePayload(senses) : null;
+}
 
+// The Fields for a headword from the live provider, in one language, or null
+// when it has no entry in that language.
+//
+// A successful response with no entries is this word having no entry rather
+// than a failure, and it is the chain's way of moving on to the next source.
+// Everything that can go wrong with the request itself is a failure of the whole
+// Lookup, because the reader cannot be told a Definition does not exist when
+// nothing was ever asked.
+async function fromProvider(key, language) {
   // Ensure the persisted cache has actually been loaded into memory before checking it -
   // otherwise a request arriving right as a suspended background script wakes up could
   // miss an entry that's already sitting in storage.
   await cachesReady;
-  const cached = caches.definitions.get(key);
+  const cacheKey = definitionCacheKey(key);
+  const cached = caches.definitions.get(cacheKey);
   if (cached) return cached;
 
   let res;
   try {
     res = await fetchWithTimeout(
-      `${API_ENDPOINTS.DICTIONARY}${encodeURIComponent(key)}`
+      `${API_ENDPOINTS.DICTIONARY}/${language}/${encodeURIComponent(key)}`
     );
   } catch (e) {
     // The fetch itself failed - offline, DNS, timed out, etc. This is a genuine connection problem.
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 
-  // The API responds with 404 when the word simply has no entry - that's not a connection
-  // problem, so it gets its own accurate message instead of the generic network error.
-  if (res.status === 404) {
-    throw new Error(ERROR_MESSAGES.NO_DEFINITION);
-  }
+  // The provider answers an unknown word with an empty success rather than a
+  // 404, but a 404 is the same fact and is not a connection problem either, so
+  // both are the chain's way of moving on.
+  if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 
+  let entries;
   try {
-    const data = await res.json();
-
-    // Extract definitions, synonyms, antonyms, and pronunciation audio
-    const defs = [];
-    const syns = new Set();
-    const ants = new Set();
-    let audio = '';
-
-    (data || []).forEach(entry => {
-      if (!audio) {
-        const withAudio = (entry.phonetics || []).find(p => p.audio);
-        if (withAudio) {
-          // Some entries return protocol-relative URLs (e.g. "//...")
-          audio = withAudio.audio.startsWith('//') ? `https:${withAudio.audio}` : withAudio.audio;
-        }
-      }
-
-      (entry.meanings || []).forEach(m => {
-        // Collect synonyms and antonyms at meaning level
-        (m.synonyms || []).forEach(s => syns.add(s));
-        (m.antonyms || []).forEach(a => ants.add(a));
-
-        // Collect definitions
-        (m.definitions || []).forEach(d => {
-          if (d.definition) {
-            defs.push({
-              definition: d.definition,
-              partOfSpeech: m.partOfSpeech || '',
-              example: d.example || ''
-            });
-          }
-          // Collect synonyms and antonyms at definition level
-          (d.synonyms || []).forEach(s => syns.add(s));
-          (d.antonyms || []).forEach(a => ants.add(a));
-        });
-      });
-    });
-
-    const result = {
-      defs: defs.slice(0, CONFIG.maxDefinitions),
-      synonyms: Array.from(syns).slice(0, CONFIG.maxSynonyms),
-      antonyms: Array.from(ants).slice(0, CONFIG.maxAntonyms),
-      audio
-    };
-
-    // Cache result and trigger debounced save
-    caches.definitions.set(key, result);
-    saveCaches();
-    return result;
+    // The response also names the source its data came from and the licence that
+    // data may be used under: Wiktionary content, CC BY-SA 4.0 - the licence the
+    // bundled artefact carries too. That credit is one statement about the
+    // dataset rather than a fact about a single response, so it is not carried
+    // through the payload; the settings is where it is owed to the reader.
+    entries = (await res.json()).entries;
   } catch (e) {
+    // A body the extension cannot read is a failed request as far as a reader is
+    // concerned: there is no answer in it to show, and a 200 carrying an outage
+    // page is exactly that.
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
+  if (!Array.isArray(entries) || !entries.length) return null;
+
+  const payload = providerPayload(entries);
+
+  // The thesaurus fills Synonym and Antonym, and nothing else, and only once
+  // the bundle and this provider have both come up with neither. It supplies no
+  // Definition and no Example sentence, so there is nothing of those for it to
+  // be asked for.
+  if (!payload.synonyms.length && !payload.antonyms.length) {
+    Object.assign(payload, await thesaurusRelations(key));
+  }
+
+  rememberDefinition(key, payload);
+  return payload;
+}
+
+// The words one relation has for a headword, or none when that request failed.
+//
+// Each relation is read on its own, and neither failure takes the other with it:
+// the Field that did resolve stays visible, which is the rule the Tooltip
+// follows when one Field fails and the others do not. A thesaurus outage must
+// not take away the Definitions the reader came for.
+async function relationWords(key, relation, limit) {
+  try {
+    const query = new URLSearchParams({ [relation]: key, max: String(limit) });
+    const res = await fetchWithTimeout(`${API_ENDPOINTS.THESAURUS}?${query}`);
+    if (!res.ok) throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+    const found = await res.json();
+    // A list of `{ word, score }`, ranked strongest first. Multiword
+    // expressions are in its vocabulary, so the rule that a Synonym is a bare
+    // word applies here as it does at every other source.
+    return bareRelations((Array.isArray(found) ? found : []).map(item => item && item.word))
+      .slice(0, limit);
+  } catch (e) {
+    console.warn(`Thesaurus ${relation} error:`, e);
+    return [];
+  }
+}
+
+// The thesaurus, which fills Synonym and Antonym and nothing else.
+//
+// The two relations are two requests rather than one: asked for together they
+// become a single constraint - results that are a synonym and an antonym of the
+// same word, which for most words is none of them - and the answer is an empty
+// list rather than an error.
+//
+// Its vocabulary is English, so this is an English relation asked of an English
+// index. For a headword that is not English it answers with nothing, which is
+// this Field being empty rather than the Lookup failing.
+async function thesaurusRelations(key) {
+  const [synonyms, antonyms] = await Promise.all([
+    relationWords(key, 'rel_syn', CONFIG.maxSynonyms),
+    relationWords(key, 'rel_ant', CONFIG.maxAntonyms)
+  ]);
+  return { synonyms, antonyms };
+}
+
+// The Fields of one Lookup of a headword's Definition, Example, Synonym and
+// Antonym. A headword is asked of the reader's Source language when they have
+// named one, and of English either way; the bundled dictionary answers the
+// English end of that, and the live provider is asked wherever the bundle has
+// nothing. Synonym and Antonym fall to the thesaurus once neither the bundle
+// nor the provider has any.
+//
+// The bundle sits at the English end rather than at the front of the chain
+// because it holds English Senses: a reader who named a Source language asked a
+// question about their own language, and the bundle cannot answer it however
+// well it covers the word. English is the fallback, and there the bundle answers
+// without a request, which is what keeps a common word free for them too.
+async function fetchDefinition(word) {
+  const key = headwordKey(word);
+
+  for (const language of definitionLanguages()) {
+    if (language === 'en') {
+      const bundled = await fromBundle(key);
+      if (bundled) return bundled;
+    }
+
+    const payload = await fromProvider(key, language);
+    if (payload) return payload;
+  }
+
+  // Every source came up empty. The thesaurus is asked last, and it can still
+  // have words related to a headword no dictionary defines: a reader who
+  // selected a piece of jargon or a product name is better served by the words
+  // around it than by nothing at all, and the Tooltip prints its not-found for
+  // the empty Definition Field beside them.
+  const relations = await thesaurusRelations(key);
+  if (!relations.synonyms.length && !relations.antonyms.length) {
+    throw new Error(ERROR_MESSAGES.NO_DEFINITION);
+  }
+
+  const payload = { defs: [], ...relations, audio: '' };
+  rememberDefinition(key, payload);
+  return payload;
 }
 
 // What a Lookup has to say when there is nothing to say: no Translation Field
@@ -396,12 +532,6 @@ browser.runtime.onMessage.addListener(async (msg) => {
       case MESSAGE_TYPES.GET_DEFINITION: {
         if (!settings.enableDefinitions) {
           return { success: false, error: ERROR_MESSAGES.DEFINITIONS_DISABLED };
-        }
-        if (settings.sourceLanguage !== 'en' && settings.sourceLanguage !== 'auto') {
-          return {
-            success: false,
-            error: ERROR_MESSAGES.SOURCE_NOT_ENGLISH
-          };
         }
         const defResult = await fetchDefinition(msg.word);
         return { success: true, data: defResult };

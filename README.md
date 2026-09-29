@@ -111,19 +111,27 @@ Click the extension icon to access settings:
 
 ## Privacy & permissions
 
-**What's sent, and where:** When you look up a selection, the word you selected is sent directly from your browser to two services:
+**What's sent, and where:** the word you selected, and nothing else. No account, no analytics, no cookies, and nothing about you stored anywhere but your own machine. WordGlance runs no servers of its own, doesn't log your lookups, and keeps your settings, cache, and per-site on/off list in Firefox's local storage, where they stay.
 
-- [Dictionary API](https://dictionaryapi.dev/) for definitions, examples, synonyms, antonyms, and pronunciation audio
-- [Wiktionary](https://en.wiktionary.org/) for the word's equivalents in your target language, and pronunciation
+**A common word reaches nobody.** WordGlance ships its own English dictionary inside the extension — 19,555 of the commonest English words, covering 98.6% of the words you will meet in running text — so a common word is answered from the package without a request leaving your machine. Which services a word *does* reach depends on what it is missing — every one below is only contacted after the one before it came up empty:
 
-That's the only data that ever leaves your browser. WordGlance itself doesn't run any servers, doesn't log your lookups, doesn't use analytics or tracking, and doesn't have accounts. Your settings, cache, and per-site on/off list are stored locally in Firefox via `browser.storage.local` and are never transmitted anywhere.
+- **[Wiktionary](https://en.wiktionary.org/)** — every Translation. The word goes to its own page, which also carries the pronunciation recording.
+- **[Wikimedia Commons](https://commons.wikimedia.org/)** — only when you press the pronunciation button. It receives the recording's file name, not the word.
+- **[Free Dictionary API](https://freedictionaryapi.com/)** — only for a word the bundled dictionary has no entry for. It receives the word and the language you are reading it in.
+- **[Datamuse](https://api.datamuse.com/)** — only when neither of those has synonyms or antonyms to show. It receives the word.
+- **[Google](https://www.google.com/)** — only when Wiktionary lists no equivalent of your word in your target language. It receives the word and your language choice.
+- **[MyMemory](https://mymemory.translated.net/)** — only if Google doesn't answer.
+- **[Bing](https://www.bing.com/)** — only if neither Google nor MyMemory answers. It issues an anonymous session token, which WordGlance echoes back with your word. No sign-in and no cookie is involved.
+
+The last three are free machine-translation services, reached only for a word Wiktionary has no equivalent of, and each only when the one before it didn't answer. They are what stops a gap in Wiktionary's coverage from leaving the Translation Field empty. The last two answer with a single word where Wiktionary would have offered you several to choose between, so a Translation from one of them is a fallback, and a rougher one. `[Why they are there](docs/adr/0005-machine-translation-fallback-chain.md)` records the reasoning, including the terms those services impose on automated access.
+
+Turning Definitions or Translations off in settings stops those requests entirely.
 
 **Permissions requested and why:**
 
 - `storage` - save your settings and cache locally
 - `activeTab` - read the current tab's hostname so the per-site toggle knows which site you're on
-- Access to `api.dictionaryapi.dev` and `en.wiktionary.org` - the two lookups above
-- Access to `commons.wikimedia.org` - to play the pronunciation recording the Wiktionary page names
+- Access to `en.wiktionary.org`, `commons.wikimedia.org`, `freedictionaryapi.com`, `api.datamuse.com`, `clients5.google.com`, `api.mymemory.translated.net`, and `www.bing.com` - the seven services above, and nothing else
 
 ## ❓ Common questions
 
@@ -137,7 +145,7 @@ A: Nope! Works instantly after installation.
 A: Yes! Works flawlessly on both desktop and mobile devices.
 
 **Q: Is my data safe?**  
-A: Yes! WordGlance doesn't collect, store, or sell any data. The only thing that leaves your browser is the word or phrase you select, sent directly to the dictionary/translation APIs above to fetch results - see [Privacy & permissions](#privacy--permissions) for details. The extension is open source, so you can inspect the code yourself.
+A: Yes! WordGlance doesn't collect, store, or sell any data. The only thing that leaves your browser is the word you selected, sent straight to the services listed above — and for a common word, nothing leaves at all. See [Privacy & permissions](#privacy--permissions) for exactly which service is contacted when. The extension is open source, so you can inspect the code yourself.
 
 **Q: Why isn't it working?**  
 A: Make sure the extension is installed and enabled. Try refreshing the page or restarting Firefox.
@@ -164,7 +172,7 @@ A: No. A Lookup is about one selected word, and the button only appears for a si
 A: Click the extension icon → toggle "Enable on This Site" off to disable WordGlance just for the site you're on (refresh the page after toggling). To turn it off everywhere, disable it from Firefox's Add-ons manager instead.
 
 **Q: Does it work offline?**  
-A: No, it needs internet to fetch definitions and translations from online APIs.
+A: Partly. Definitions, examples, synonyms and antonyms for the 19,555 commonest English words are served from a dictionary bundled inside the extension, so those keep working with no connection. A rarer word, and every Translation, needs the internet.
 
 **Q: What browsers are supported?**  
 A: This extension is designed for Firefox. For Chrome, Edge, Safari, and other browsers, use the [WordGlance Userscript](https://github.com/ShrekBytes/WordGlance) instead.
@@ -195,14 +203,17 @@ The extension uses browser storage for user preferences:
 - `wordglance-cache-definitions` - Cached dictionary results
 - `wordglance-cache-translations` - Cached translation results
 
-### APIs used
+### Where the data comes from
 
-- **Dictionary**: [Dictionary API](https://dictionaryapi.dev/) - Free English dictionary
-- **Translation and pronunciation**: [Wiktionary](https://en.wiktionary.org/) - the word's equivalents in your target language, and pronunciation
+- **Bundled dictionary** (`data/wordglance-en-dictionary.json.gz`) - the 19,555 commonest English words, built from a [kaikki.org Wiktionary extraction](https://kaikki.org/dictionary/English/) with [wiktextract](https://github.com/tatuylonen/wiktextract). Wiktionary content, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Read out of the package; it never leaves your machine. Regenerate it with `npm run build:dictionary` - see [docs/dictionary-refresh.md](docs/dictionary-refresh.md).
+- **Dictionary**: [Free Dictionary API](https://freedictionaryapi.com/) - words the bundle does not carry. Wiktionary content, CC BY-SA 4.0.
+- **Relations**: [Datamuse](https://api.datamuse.com/) - synonyms and antonyms, only when neither of the above has any
+- **Translation and pronunciation**: [Wiktionary](https://en.wiktionary.org/) - the word's equivalents in your target language, and the recording to play
+- **Translation fallbacks**, reached only when Wiktionary has no equivalent: [Google](https://www.google.com/), [MyMemory](https://mymemory.translated.net/), then [Bing](https://www.bing.com/) - see [ADR-0005](docs/adr/0005-machine-translation-fallback-chain.md)
 
-Only the selected word and your chosen language code are sent to these APIs - see [Privacy & permissions](#privacy--permissions).
+Only the selected word, a language code, and (for Bing) an anonymous session token are sent - see [Privacy & permissions](#privacy--permissions).
 
-_Special thanks to these amazing free APIs that make WordGlance possible!_
+_Special thanks to these amazing free services that make WordGlance possible!_
 
 ## Contributing
 

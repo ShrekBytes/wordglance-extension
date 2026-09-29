@@ -34,10 +34,21 @@ Amharic, Arabic, Bengali, Bulgarian, Chinese, Croatian, Czech, Danish, Dutch, En
 
 **Privacy & Security:**
 
-- The word or phrase you select is sent directly to the [Dictionary API](https://dictionaryapi.dev/) and/or our translation API to fetch results - that's the only data that ever leaves your browser
-- We don't run analytics, tracking, or ads, and we don't log or store your lookups ourselves
-- Settings and cache stay in your browser's local storage
+- The word you select is sent straight from your browser to the services below — that is the only data that ever leaves it. WordGlance runs no servers, logs no lookups, and has no accounts.
+- A **common English word reaches nobody at all**: definitions, examples, synonyms and antonyms for the 19,555 commonest words come from a dictionary bundled inside the extension. A rare word, and any Translation, cost a request.
+- Each service is contacted only when the ones before it had no answer:
+  1. **Wiktionary** (en.wiktionary.org) — every Translation, for the word's equivalents in your target language and its pronunciation
+  2. **Wikimedia Commons** (commons.wikimedia.org) — only when you press the pronunciation button, for the recording's file name
+  3. **Free Dictionary API** (freedictionaryapi.com) — only for a word the bundled dictionary does not carry
+  4. **Datamuse** (api.datamuse.com) — only when neither has synonyms or antonyms to show
+  5. **Google** (clients5.google.com), **MyMemory** (api.mymemory.translated.net), **Bing** (www.bing.com) — free machine-translation fallbacks, in that order, reached only when Wiktionary lists no equivalent of your word in your target language. MyMemory and Bing answer with a single word where Wiktionary would have offered several to choose between, so a Translation from one of them is a fallback and a rougher one. They issue no cookie and require no sign-in.
+- Your settings, cache, and per-site on/off list stay in your browser's local storage and are never transmitted
+- No analytics, no tracking, no ads
 - Open source code, so you can verify all of this yourself
+
+**Attribution:**
+
+Definitions, examples, synonyms and antonyms come from Wiktionary via the [kaikki.org](https://kaikki.org/dictionary/English/) extraction, with [wiktextract](https://github.com/tatuylonen/wiktextract), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Translations and pronunciation audio come from Wiktionary and Wikimedia Commons, under the same licence. Relations, where a dictionary entry carries none, come from [Datamuse](https://www.datamuse.com/).
 
 **Browser Support:**
 

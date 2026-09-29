@@ -154,7 +154,7 @@ A: Yes, unless you've turned it off for that specific site in Settings.
 A: Click the extension icon → Settings → Choose your language.
 
 **Q: Why do some words show "Definition not found"?**  
-A: Nothing defines that word. A rare technical term, a name, or a very new coinage may be in none of the sources WordGlance asks — and "Definition not found" is a real answer, not a broken extension. "Connection error" is the other thing you can see, and it means the opposite: the request failed, so WordGlance does not yet know. Turning Definitions or Translations off in settings gives a third, which is deliberate.
+A: Nothing defines that word. A rare technical term, a name, or a very new coinage may be in none of the sources WordGlance asks — and "Definition not found" is a real answer, not a broken extension. "Connection error" is the other thing you can see, and it means the opposite: the request failed, so WordGlance does not yet know. Turning Definitions or Translations off in settings removes that Field from the tooltip altogether, rather than filling it with an explanation.
 
 **Q: Does it slow down my browser?**  
 A: No! WordGlance is lightweight and only activates when you select text.

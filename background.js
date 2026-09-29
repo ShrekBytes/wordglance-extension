@@ -71,11 +71,161 @@ async function clearAllCaches() {
   });
 }
 
+// The dictionary that ships in the package, read once on the first Lookup that
+// needs it and then held as a map from headword to Senses. See ADR-0002.
+//
+// The promise is kept rather than the entries, so a burst of Lookups - or two
+// arriving together while the background is waking - share one read. Nothing is
+// loaded at startup: this is a non-persistent background script, so it is woken
+// for every message, and a reader who only ever translates would otherwise pay
+// for 5 MB of dictionary on every wake to read none of it.
+let bundleLoad = null;
+
+function loadBundle() {
+  if (!bundleLoad) {
+    // A plain fetch, not fetchWithTimeout. CONFIG.apiTimeout is a timeout on a
+    // provider over the network, and a packaged read is not one: applying it
+    // here would abort a cold background page part-way through inflating 5 MB,
+    // and because a failure is remembered that one slow read would send every
+    // Definition in the session to the provider. A file in the extension's own
+    // directory resolves or it does not.
+    bundleLoad = (async () => {
+      const res = await fetch(BUNDLED_DICTIONARY);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      // Decompressed through a stream rather than by inflating the bytes and
+      // calling text() on them, so the 20 MB of text is never held alongside the
+      // map it becomes. The map is what stays resident; this string is not
+      // referenced once JSON.parse has returned.
+      const text = await new Response(
+        res.body.pipeThrough(new DecompressionStream('gzip'))
+      ).text();
+
+      const parsed = JSON.parse(text);
+      return (parsed && parsed.entries) || {};
+    })().catch(e => {
+      // A missing or corrupt artefact is a packaging fault, not a Lookup fault.
+      // Fall through to the provider rather than failing every Definition.
+      //
+      // The failure is remembered, and that is right here rather than a shortcut:
+      // every way this read can fail is permanent. The file is not there, the
+      // gzip is truncated, the JSON is not the shape the generator writes - none
+      // of those change while the browser runs. Retrying would re-inflate the
+      // same 5 MB on every Lookup for a result that cannot differ.
+      console.warn('Bundled dictionary error:', e);
+      return {};
+    });
+  }
+  return bundleLoad;
+}
+
+// A Synonym and an Antonym are bare words, so a multi-word phrase is dropped
+// rather than trimmed: "happy as a lark" is not a word, and trimming it to
+// "happy" would assert a synonym the source did not. The artefact already
+// applies this at build time; repeating it here means the rule lives with the
+// payload, and a refreshed artefact with a looser budget cannot put a phrase
+// where a single word belongs.
+function bareRelations(list) {
+  return (Array.isArray(list) ? list : []).filter(
+    word => typeof word === 'string' && word.length > 0 && !/\s/.test(word)
+  );
+}
+
+// The part of speech as the Tooltip shows it.
+//
+// Wiktionary's tags are abbreviations — `adj`, `adv`, `prep_phrase` — and the
+// Tooltip prints a part of speech on its own line, so passing them through would
+// put "adj" on screen where the provider path puts "adjective". A bundled
+// Definition has to be indistinguishable from a fetched one.
+//
+// These are the 21 values the artefact actually contains, so the map is the
+// measured set rather than a general one: a refresh that introduces a tag
+// falls through to the tag itself, which shows the reader something rather
+// than nothing. A tag worth explaining properly is a decision, not a default.
+const PART_OF_SPEECH = {
+  noun: 'noun',
+  verb: 'verb',
+  adj: 'adjective',
+  adv: 'adverb',
+  name: 'proper noun',
+  intj: 'interjection',
+  prep: 'preposition',
+  pron: 'pronoun',
+  det: 'determiner',
+  conj: 'conjunction',
+  num: 'numeral',
+  phrase: 'phrase',
+  symbol: 'symbol',
+  contraction: 'contraction',
+  particle: 'particle',
+  character: 'character',
+  article: 'article',
+  prep_phrase: 'prepositional phrase',
+  postp: 'postposition',
+  infix: 'infix',
+  prefix: 'prefix'
+};
+
+const partOfSpeech = (pos) => PART_OF_SPEECH[pos] || pos || '';
+
+// The payload for a Lookup answered from the bundle, in the shape the content
+// script already renders, so a bundled Definition looks like any other.
+//
+// Synonyms and Antonyms are the Senses' own, walked in dictionary order and
+// deduplicated. The artefact holds no entry-level list - each Sense carries its
+// own - so there is nothing to flatten, which is what makes the flattening
+// ADR-0002 forbids impossible here rather than merely avoided. What the payload
+// cannot express, because the Tooltip shows one list per Lookup rather than one
+// per Sense, is which Sense each of them came from; a reader on the second page
+// of Definitions is reading a list drawn from all of them.
+function bundlePayload(senses) {
+  const defs = [];
+  const synonyms = new Set();
+  const antonyms = new Set();
+
+  for (const sense of senses) {
+    // A Sense carries one Example and one or more Definitions. The payload
+    // pairs one Example with one Definition, so the Sense's Example goes with
+    // the first Definition it shows - the one a reader reads first, and today
+    // the only one, since the artefact budget is one Definition per Sense.
+    const example = (sense.examples || [])[0] || '';
+    for (const definition of sense.definitions || []) {
+      if (!definition) continue;
+      defs.push({ definition, partOfSpeech: partOfSpeech(sense.pos), example });
+    }
+    bareRelations(sense.synonyms).forEach(word => synonyms.add(word));
+    bareRelations(sense.antonyms).forEach(word => antonyms.add(word));
+  }
+
+  return {
+    defs: defs.slice(0, CONFIG.maxDefinitions),
+    synonyms: Array.from(synonyms).slice(0, CONFIG.maxSynonyms),
+    antonyms: Array.from(antonyms).slice(0, CONFIG.maxAntonyms),
+    // The bundle carries no audio, and a Lookup that must not touch the
+    // network cannot go and get any. Pronunciation is a live Field from a
+    // Wiktionary request (issue #17); until it lands, a bundled Lookup shows no
+    // pronounce button, which is that Field's documented empty outcome rather
+    // than a broken one.
+    audio: ''
+  };
+}
+
 async function fetchDefinition(word) {
   // A Lookup is about one headword. A multi-word selection is rejected here,
-  // before any request, so a phrase never reaches a provider.
+  // before the bundle is read and before any request, so a phrase never reaches
+  // a provider and never costs a decompression.
   const key = HeadwordUtils.normalize(word).toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
+
+  // The bundle answers before the cache and before the provider. It is in the
+  // package, it costs nothing, and it is the data this extension is built
+  // around, so where it has an answer that is the answer a reader gets.
+  //
+  // An entry with no Senses is treated as a miss for the same reason: the
+  // generator drops a headword it cannot answer, so one here is a defect, and a
+  // Lookup that reached the provider is more useful than one that did not.
+  const bundled = (await loadBundle())[key];
+  if (bundled && bundled.length) return bundlePayload(bundled);
 
   // Ensure the persisted cache has actually been loaded into memory before checking it -
   // otherwise a request arriving right as a suspended background script wakes up could

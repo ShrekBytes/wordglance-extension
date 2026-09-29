@@ -668,6 +668,39 @@ test('no headword carries the same Sense twice', { skip: !built }, () => {
   }
 });
 
+test('the packaged dictionary is in the release build', { skip: !built }, () => {
+  // The bundle is only the answer ADR-0002 promises if it ships. The release
+  // workflow zips an explicit file list, so an artefact that is committed but
+  // left out of that list fails in a published extension, silently, by falling
+  // back to the live provider for every word.
+  const workflow = fs.readFileSync(
+    path.resolve(__dirname, '..', '.github', 'workflows', 'build-and-release-xpi.yml'),
+    'utf8'
+  );
+
+  const start = workflow.indexOf('zip -r');
+  assert.ok(start > -1, 'the workflow still zips an explicit file list');
+
+  // The command is continued with trailing backslashes, so it runs to the first
+  // line that is not. Slicing to a fixed offset would silently start asserting
+  // on a different step the day someone reformats the file above it.
+  const command = workflow
+    .slice(start)
+    .split('\n')
+    .reduce((lines, line) => {
+      if (lines.length && !lines[lines.length - 1].trimEnd().endsWith('\\')) return lines;
+      return [...lines, line];
+    }, [])
+    .join('\n');
+
+  assert.match(
+    command,
+    /(^|\s)data(\s|$)/m,
+    'the packaged dictionary is not in the XPI file list, so every Definition ' +
+    'would fall through to the live provider in a published build'
+  );
+});
+
 function readArtefact() {
   const zlib = require('node:zlib');
   return JSON.parse(zlib.gunzipSync(fs.readFileSync(ARTEFACT)).toString('utf8'));

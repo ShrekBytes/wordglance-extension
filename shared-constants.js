@@ -48,6 +48,15 @@ const API_ENDPOINTS = {
   TRANSLATION: 'https://translation-1e79fb3f3adb.herokuapp.com/translate'
 };
 
+// The English dictionary that ships inside the package, relative to the
+// extension root. The background script reads it with fetch, which resolves this
+// against its own document and so never leaves the machine - it needs no host
+// permission, and nothing in this repository excludes it from the XPI.
+//
+// Kept beside API_ENDPOINTS so the two things background.js can fetch are in
+// one place: what it asks the network for, and what it already has.
+const BUNDLED_DICTIONARY = 'data/wordglance-en-dictionary.json.gz';
+
 const MESSAGE_TYPES = {
   GET_DEFINITION: 'GET_DEFINITION',
   GET_TRANSLATION: 'GET_TRANSLATION',

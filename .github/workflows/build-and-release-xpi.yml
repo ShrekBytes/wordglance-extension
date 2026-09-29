@@ -70,6 +70,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
+          # `data` carries the bundled English dictionary that background.js
+          # reads at runtime. Without it in the package every Definition falls
+          # back to the live provider, which is the failure this bundle exists
+          # to remove. See docs/adr/0002-bundle-the-english-dictionary.md.
           zip -r "${{ steps.version_check.outputs.xpi_path }}" \
             manifest.json \
             background.js \
@@ -79,7 +83,8 @@ jobs:
             popup.js \
             shared-constants.js \
             shared-utilities.js \
-            assets
+            assets \
+            data
 
       - name: Commit unsigned XPI to dist
         if: steps.version_check.outputs.version_changed == 'true'

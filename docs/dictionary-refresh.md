@@ -1,11 +1,11 @@
 # The bundled English dictionary
 
-`data/wordglance-en-dictionary.json.gz` is the dictionary the extension will ship.
+`data/wordglance-en-dictionary.json.gz` is the dictionary the extension ships.
 It is generated once from a pinned upstream extraction and committed. It is not
 built by CI and not built at release time.
 
-It is not read by the extension yet — see [Not yet read by the
-extension](#not-yet-read-by-the-extension) below.
+The background script reads it and answers a Definition from it with no network
+request at all. See [How the extension reads it](#how-the-extension-reads-it).
 
 ## Why it exists
 
@@ -256,7 +256,7 @@ A Sense holds exactly one Definition in the artefact, its first upstream gloss,
 even though CONTEXT.md allows a Sense to carry several. ADR-0002's budget ("first
 gloss truncated to 220 characters") is a per-Sense figure, and widening it to
 several was not tested, so the lossy shape is recorded here rather than silently
-inherited. Issue #16 reads this shape; if the Tooltip wants more than one
+inherited. The extension reads this shape; if the Tooltip wants more than one
 Definition per Sense, the budget and this artefact both change.
 
 Each Sense carries its own Examples, Synonyms and Antonyms. The entry-level lists
@@ -296,19 +296,101 @@ The word-frequency list is from
 publishes the list without a licence. It is used here to choose which words to
 carry, never as content, so nothing derived from it is redistributed.
 
-## Not yet read by the extension
+## How the extension reads it
 
-The artefact is committed but nothing loads it yet. Wiring it into `background.js`
-is issue #16, and the packaging change that ships `data/` in the XPI belongs there
-too — until then the file is dead weight in the repository and not in the
-released package, which is the cheaper place for it to be.
+`background.js` reads the artefact through `BUNDLED_DICTIONARY` in
+`shared-constants.js` and answers a Definition from it before it looks at the
+cache or the provider.
 
-One thing #16 should know before it decides how to read the file: the
-`definitions` array holds exactly one element per Sense, so reading it as
-`definitions[0]` is correct today and would silently drop data the moment the
-budget is widened to two.
+**Once, lazily.** The read is triggered by the first Definition Lookup and the
+promise is memoised, so a burst of Lookups — or two arriving together while a
+non-persistent background script is waking — share one read. Nothing is loaded at
+startup: a reader who only ever translates would otherwise pay for 5 MB on every
+wake to read none of it. A Translation Lookup does not touch the file at all.
 
-The shape the reader is expected to take, so #16 does not have to re-derive it:
-the compressed bytes are decompressed once, and the decompressed JSON string is
-dropped in favour of the parsed map rather than kept alongside it, so the
-resident cost is one copy of the data rather than two.
+**A relative path, not a URL.** `data/wordglance-en-dictionary.json.gz` resolves
+against the background script's own document, so the read is from inside the
+package: no host permission, and nothing leaves the machine. A test asserting a
+Lookup is offline therefore asserts on the URLs requested *over the network*,
+which the harness exposes as `networkUrls`; the packaged read is a file read, not
+a request.
+
+**Streamed, then dropped.** The compressed bytes go through a
+`DecompressionStream`, so the 20 MB of decompressed JSON is never held alongside
+the map it becomes. What stays resident is the parsed `entries` map, and the
+text is unreachable once `JSON.parse` returns. Measured on the committed
+artefact: **90 MB of resident heap** for the map, and **310 ms** to inflate and
+parse it. Every Lookup after the first is a map lookup.
+
+That heap figure is the real cost of this decision, and it is worth stating
+plainly rather than only in the ADR's size comparison: a background script
+holding 90 MB is well within what Firefox gives an extension, and it is
+reclaimed when the script is unloaded. A reader who only ever translates never
+pays it, because nothing is loaded until a Definition is asked for.
+
+**A miss is a miss, not a failure.** A headword the bundle does not carry falls
+through to the live provider unchanged, which is the design ADR-0002 describes
+rather than a defect. A packaged file that is missing, unreadable, or not the
+shape the generator writes is treated the same way: the read logs a warning once,
+resolves to an empty map, and every Definition goes to the provider. A packaging
+fault must not take the extension's main feature offline.
+
+Two consequences of that, both deliberate. The failure is remembered rather than
+retried, because every way a packaged read fails is permanent — the file is not
+there, the gzip is truncated, the JSON is not the shape the generator writes, and
+none of those change while the browser runs. And the read carries no timeout:
+`CONFIG.apiTimeout` bounds a provider over the network, and aborting a cold
+background page part-way through inflating 5 MB would send every Definition in
+that session to the provider because the machine was briefly busy.
+
+**`data/` is in the XPI.** The release workflow zips an explicit file list, so
+the artefact being committed is not by itself evidence that it ships. A test
+asserts the file list contains it, because the failure otherwise is a published
+extension that quietly falls back to the live provider for every word.
+
+### What the payload can and cannot say
+
+A Sense's `definitions` array is read element by element, not as
+`definitions[0]`. One element per Sense is what the budget produces today, so
+reading only the first would be correct now and would silently drop data the
+moment the budget widened to two.
+
+The Example is the other place the payload is narrower than the data. A Sense
+carries one Example and the payload pairs one Example with one Definition, so the
+Sense's Example goes with the first Definition it shows. Same reason: the budget
+makes that unambiguous today and the code should not depend on it staying that
+way.
+
+Synonyms and Antonyms are the Senses' own, walked in dictionary order and
+deduplicated, and multi-word phrases are filtered at the reader as well as at
+build time. What the payload *cannot* express, because the Tooltip shows one list
+per Lookup rather than one per Sense, is which Sense each of them came from — so a
+reader on the second page of Definitions is reading a list drawn from all of
+them. The flattening ADR-0002 forbids is the entry-level dump, which the artefact
+does not contain at all; making the relations Sense-specific on screen as well is
+a change to the Tooltip, not to this ticket.
+
+The part of speech is the one place the reader rewrites the data rather than
+passing it through. Wiktionary's tags are abbreviations — `adj`, `adv`,
+`prep_phrase` — and the Tooltip prints the part of speech on its own line, so
+passing them through would put "adj" on screen where the provider path puts
+"adjective". `PART_OF_SPEECH` in `background.js` spells out the 21 tags the
+artefact actually contains, measured rather than guessed; a tag a future refresh
+introduces falls through to the tag itself, which shows the reader something
+rather than nothing.
+
+### Two things the bundle does not do
+
+**It carries no audio.** A Lookup that must not touch the network cannot go and
+get a pronunciation, so a bundled Lookup returns an empty `audio` and the
+Tooltip's pronounce button stays hidden — the Field's documented empty outcome
+rather than a broken control. Pronunciation arrives with the Wiktionary reader in
+issue #17. This is a visible change for a reader who had a pronounce button for a
+common word, and it is the one regression this ticket accepts.
+
+**It is not written to the persisted cache.** The cache exists to stop a request
+being made, and a bundled Lookup makes none; writing every common word a reader
+looks up would fill extension storage with a copy of data the package already
+holds. It is also why the bundle is consulted before the cache: a word in both
+should show the bundle's Senses rather than whatever a provider said about it
+last week.

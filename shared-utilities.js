@@ -11,7 +11,6 @@ const CONFIG = {
   translationsPerPage: 4,
   maxSynonyms: 6,
   maxAntonyms: 6,
-  maxSelectionLength: 100,
   // A Lookup is about one headword (see HeadwordUtils), so this is a
   // plausibility bound rather than a selection cap: long enough for the longest
   // compound in a corpus dictionary, short enough that a run of one repeated
@@ -163,9 +162,8 @@ const HeadwordUtils = {
     // Whitespace is absent from this class deliberately. Allowing it here and
     // rejecting it in the length check would be the same rule written twice.
     //
-    // Punctuation is safe to accept for the same reason it is safe in
-    // TextUtils: everything downstream sets text via textContent, never
-    // innerHTML.
+    // Punctuation is safe to accept because everything downstream sets text via
+    // textContent, never innerHTML.
     const singleToken = /^[\w\u00C0-\u024F\u0300-\u036F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u200c\u200d'\u2018\u2019.\-]+$/;
     if (!singleToken.test(cleaned)) return '';
 
@@ -177,47 +175,20 @@ const HeadwordUtils = {
   }
 };
 
-// Sanitises selected text for the Translation path.
+// The Translation Field is suppressed when the reader has explicitly set their
+// Source language to the Target language: the headword is already in the
+// language they asked to read it in, so there is nothing to translate it into.
 //
-// A Lookup is about one headword and HeadwordUtils governs the trigger, so a
-// phrase cannot reach here from the content script today. The translation
-// providers are still sanitised rather than trusted, because this is the
-// boundary where their query is built - and the provider set is being replaced
-// in later work, which is the point at which a phrase could arrive again. The
-// 5-word and 100-character limits stay until that work says otherwise; they are
-// not load-bearing today and removing them here would be a change to the
-// Translation path made in a ticket about the dictionary.
-const TextUtils = {
-  sanitize(text) {
-    if (!text || typeof text !== 'string') return '';
-
-    // Basic trimming and filtering. Apostrophes are intentionally NOT stripped here -
-    // they're needed for contractions/possessives (don't, it's, O'Brien) and are already
-    // safe: output is always set via textContent (never innerHTML), and the translation
-    // request builds its query with URLSearchParams, which percent-encodes them itself.
-    const cleaned = text.trim().replace(/[\x00-\x1F\x7F-\x9F<>"&]/g, '');
-
-    // Length validation
-    if (cleaned.length === 0 || cleaned.length > CONFIG.maxSelectionLength) return '';
-
-    // Word count validation
-    const words = cleaned.split(/\s+/).filter(Boolean);
-    if (words.length > 5) return '';
-
-    // Numeric-only check
-    if (/^\d+$/.test(cleaned)) return '';
-
-    // Valid character check (supports multiple scripts)
-    const validChars = /^[\w\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u200c\u200d\s\-\'\.\,\;\:\!\?]+$/;
-    if (!validChars.test(cleaned)) return '';
-
-    // Must contain at least one letter, so a selection of digits or
-    // punctuation is not mistaken for a word.
-    if (!LETTER.test(cleaned)) return '';
-
-    return cleaned;
-  }
-};
+// Decided locally, never asked of a provider, so the answer is identical
+// whichever provider is behind it and the Lookup costs nothing. Shared because
+// two scripts need it - the background to issue no request, the Tooltip to show
+// no Field - and two copies of one rule would eventually disagree.
+function translationSuppressed(settings) {
+  // 'auto' is a setting, not a language. It can never be equal to a Target
+  // language, and treating it as one would suppress the Field for the reader
+  // who never set a Source language at all.
+  return settings.sourceLanguage !== 'auto' && settings.sourceLanguage === settings.targetLanguage;
+}
 
 function debounce(func, wait) {
   let timeout;

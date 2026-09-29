@@ -111,10 +111,10 @@ Click the extension icon to access settings:
 
 ## Privacy & permissions
 
-**What's sent, and where:** When you look up a selection, the word or phrase (plus your chosen source/target language codes) is sent directly from your browser to two services:
+**What's sent, and where:** When you look up a selection, the word you selected is sent directly from your browser to two services:
 
 - [Dictionary API](https://dictionaryapi.dev/) for definitions, examples, synonyms, antonyms, and pronunciation audio
-- [Free Translate API](https://translation-1e79fb3f3adb.herokuapp.com/) for translations
+- [Wiktionary](https://en.wiktionary.org/) for the word's equivalents in your target language, and pronunciation
 
 That's the only data that ever leaves your browser. WordGlance itself doesn't run any servers, doesn't log your lookups, doesn't use analytics or tracking, and doesn't have accounts. Your settings, cache, and per-site on/off list are stored locally in Firefox via `browser.storage.local` and are never transmitted anywhere.
 
@@ -122,7 +122,8 @@ That's the only data that ever leaves your browser. WordGlance itself doesn't ru
 
 - `storage` - save your settings and cache locally
 - `activeTab` - read the current tab's hostname so the per-site toggle knows which site you're on
-- Access to `api.dictionaryapi.dev` and the translation API domain - the two lookups above
+- Access to `api.dictionaryapi.dev` and `en.wiktionary.org` - the two lookups above
+- Access to `commons.wikimedia.org` - to play the pronunciation recording the Wiktionary page names
 
 ## ❓ Common questions
 
@@ -157,7 +158,7 @@ A: Very new words, slang, or technical terms might not be in the dictionary. Try
 A: No! WordGlance is lightweight and only activates when you select text.
 
 **Q: Can I translate entire sentences?**  
-A: Selections are capped at 5 words / 100 characters, so it works best with short phrases. For longer text, use a dedicated translation tool.
+A: No. A Lookup is about one selected word, and the button only appears for a single word. WordGlance shows that word's equivalents in your target language, not a translation of your selection.
 
 **Q: How do I disable it temporarily?**  
 A: Click the extension icon → toggle "Enable on This Site" off to disable WordGlance just for the site you're on (refresh the page after toggling). To turn it off everywhere, disable it from Firefox's Add-ons manager instead.
@@ -197,9 +198,9 @@ The extension uses browser storage for user preferences:
 ### APIs used
 
 - **Dictionary**: [Dictionary API](https://dictionaryapi.dev/) - Free English dictionary
-- **Translation**: [Free Translate API](https://translation-1e79fb3f3adb.herokuapp.com/) - Multi-language translation
+- **Translation and pronunciation**: [Wiktionary](https://en.wiktionary.org/) - the word's equivalents in your target language, and pronunciation
 
-Only the selected word/phrase and your chosen language codes are sent to these APIs - see [Privacy & permissions](#privacy--permissions).
+Only the selected word and your chosen language code are sent to these APIs - see [Privacy & permissions](#privacy--permissions).
 
 _Special thanks to these amazing free APIs that make WordGlance possible!_
 

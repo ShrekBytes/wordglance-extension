@@ -201,21 +201,25 @@ function bundlePayload(senses) {
     defs: defs.slice(0, CONFIG.maxDefinitions),
     synonyms: Array.from(synonyms).slice(0, CONFIG.maxSynonyms),
     antonyms: Array.from(antonyms).slice(0, CONFIG.maxAntonyms),
-    // The bundle carries no audio, and a Lookup that must not touch the
-    // network cannot go and get any. Pronunciation is a live Field from a
-    // Wiktionary request (issue #17); until it lands, a bundled Lookup shows no
-    // pronounce button, which is that Field's documented empty outcome rather
-    // than a broken one.
+    // The bundle carries no audio, and a bundled Lookup must not touch the
+    // network, so it yields no recording of its own. Pronunciation comes off
+    // the Wiktionary page instead - the same page the Translation Field is read
+    // from, so asking for it costs nothing extra.
     audio: ''
   };
 }
 
-async function fetchDefinition(word) {
-  // A Lookup is about one headword. A multi-word selection is rejected here,
-  // before the bundle is read and before any request, so a phrase never reaches
-  // a provider and never costs a decompression.
+// A Lookup is about one headword, so this is where a selection that is not one
+// is refused - before the bundle is read and before any request is issued. Both
+// Fields go through it, so a phrase can never reach a provider by either.
+function headwordKey(word) {
   const key = HeadwordUtils.normalize(word).toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
+  return key;
+}
+
+async function fetchDefinition(word) {
+  const key = headwordKey(word);
 
   // The bundle answers before the cache and before the provider. It is in the
   // package, it costs nothing, and it is the data this extension is built
@@ -308,69 +312,61 @@ async function fetchDefinition(word) {
   }
 }
 
-async function fetchTranslation(text) {
-  const cleanText = TextUtils.sanitize(text);
-  if (!cleanText) throw new Error(ERROR_MESSAGES.INVALID_TEXT);
+// What a Lookup has to say when there is nothing to say: no Translation Field
+// and no recording. One literal, because both of the paths that reach it - a
+// suppressed Field and a headword Wiktionary has no page for - mean the same to
+// a reader.
+const NOTHING_TO_TRANSLATE = { translations: [], audio: '' };
 
-  const key = `${cleanText}::${settings.sourceLanguage}::${settings.targetLanguage}`;
+async function fetchTranslation(word) {
+  const key = headwordKey(word);
+
+  if (translationSuppressed(settings)) {
+    return NOTHING_TO_TRANSLATE;
+  }
+
+  // Keyed by the Target language because both Fields read out of the page depend
+  // on it: which equivalents to list, and which recording to prefer.
+  const cacheKey = `${key}::${settings.targetLanguage}`;
   await cachesReady;
-  const cached = caches.translations.get(key);
+  const cached = caches.translations.get(cacheKey);
   if (cached) return cached;
 
-  const params = new URLSearchParams({
-    dl: settings.targetLanguage,
-    text: cleanText
-  });
-  if (settings.sourceLanguage !== 'auto') {
-    params.set('sl', settings.sourceLanguage);
-  }
+  const query = new URLSearchParams({ title: key, action: 'raw' });
 
   let res;
   try {
-    res = await fetchWithTimeout(
-      `${API_ENDPOINTS.TRANSLATION}?${params}`
-    );
+    res = await fetchWithTimeout(`${API_ENDPOINTS.WIKTIONARY}?${query}`);
   } catch (e) {
+    // The fetch itself failed - offline, DNS, timed out, etc. This is a genuine connection problem.
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 
+  // A headword Wiktionary has no page for has no equivalents in the reader's
+  // Target language either, and that is the Field being empty rather than the
+  // Lookup failing: the reader still gets the Definitions they came for. The
+  // distinction from the server failure below is load-bearing - reporting an
+  // outage as "no equivalents" would tell a reader their word has none when
+  // nothing was ever asked.
+  if (res.status === 404) {
+    return NOTHING_TO_TRANSLATE;
+  }
   if (!res.ok) {
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 
   try {
-    const data = await res.json();
-
-    // Extract translations
-    const translations = [];
-    if (data?.['destination-text']) {
-      translations.push(data['destination-text']);
-
-      // Add alternative translations
-      const allTranslations = data.translations?.['all-translations'] || [];
-      for (const group of allTranslations) {
-        if (Array.isArray(group) && group[0] &&
-            group[0] !== data['destination-text'] &&
-            !translations.includes(group[0])) {
-          translations.push(group[0]);
-          if (translations.length >= CONFIG.maxTranslations) break;
-        }
-      }
-
-      // Add possible translations if we need more
-      if (translations.length < CONFIG.maxTranslations) {
-        const extra = (data.translations?.['possible-translations'] || [])
-          .filter(t => t && !translations.includes(t));
-        translations.push(...extra.slice(0, CONFIG.maxTranslations - translations.length));
-      }
-    }
+    const markup = await res.text();
 
     const result = {
-      translations: translations.slice(0, CONFIG.maxTranslations)
+      translations: WiktionaryUtils
+        .readTranslations(markup, settings.targetLanguage)
+        .slice(0, CONFIG.maxTranslations),
+      audio: WiktionaryUtils.readAudio(markup, settings.targetLanguage)
     };
 
     // Cache result and trigger debounced save
-    caches.translations.set(key, result);
+    caches.translations.set(cacheKey, result);
     saveCaches();
     return result;
   } catch (e) {
@@ -415,7 +411,7 @@ browser.runtime.onMessage.addListener(async (msg) => {
         if (!settings.enableTranslations) {
           return { success: false, error: ERROR_MESSAGES.TRANSLATIONS_DISABLED };
         }
-        const transResult = await fetchTranslation(msg.text);
+        const transResult = await fetchTranslation(msg.word);
         return { success: true, data: transResult };
       }
 

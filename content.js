@@ -221,6 +221,10 @@
 
       .wordglance-tooltip .example { font-style: italic; color: #7f8c8d; font-size: 12px; margin-top: 4px; }
       .wordglance-tooltip.dark-mode .example { color: #cccccc; }
+      /* A Field with nothing in it. CONTEXT.md: empty is a normal outcome, not
+         a failure, so it is not styled as one. */
+      .wordglance-tooltip .field-empty { color: #7f8c8d; font-style: italic; font-size: 12px; }
+      .wordglance-tooltip.dark-mode .field-empty { color: #cccccc; }
       .wordglance-tooltip .loading { color: #7f8c8d; font-style: italic; }
       .wordglance-tooltip.dark-mode .loading { color: #cccccc; }
       .wordglance-tooltip .error { color: #e74c3c; font-size: 13px; }
@@ -684,6 +688,13 @@
       }
     }
 
+    // Whether this Lookup has a Translation Field at all: the reader's setting,
+    // and not their Target language being the headword's own (see
+    // translationSuppressed for why, and for what the background does about it).
+    function translationFieldWanted() {
+      return settings.enableTranslations && !translationSuppressed(settings);
+    }
+
     // Synonyms/antonyms live in their own section (a sibling of .definition-section,
     // not nested inside it), so they need the enableDefinitions check applied separately.
     function updateSectionVisibility() {
@@ -692,7 +703,7 @@
       const synSection = tooltip.querySelector('.synonyms-antonyms-section');
 
       if (defSection) defSection.style.display = settings.enableDefinitions ? '' : 'none';
-      if (transSection) transSection.style.display = settings.enableTranslations ? '' : 'none';
+      if (transSection) transSection.style.display = translationFieldWanted() ? '' : 'none';
       if (synSection) {
         const hasContent = synSection.dataset.hasContent === 'true';
         synSection.style.display = hasContent && settings.enableDefinitions ? '' : 'none';
@@ -820,7 +831,11 @@
         const pageDiv = createElement('div', 'content-page');
 
         if (!page.length) {
-          pageDiv.appendChild(createElement('div', 'error', ERROR_MESSAGES.NO_TRANSLATION));
+          // A headword with no equivalent in the reader's Target language. The
+          // Field is empty, which is a normal outcome, so it says so in the
+          // ordinary neutral style rather than the error style: the reader is
+          // told the absence is real, not that something went wrong.
+          pageDiv.appendChild(createElement('div', 'field-empty', ERROR_MESSAGES.NO_TRANSLATION));
         } else {
           const grid = createElement('div', 'translation-grid');
 
@@ -1060,13 +1075,14 @@
 
       const defSlider = getCachedSelector('defSlider', '.definition-slider');
       const transSlider = getCachedSelector('transSlider', '.translation-slider');
+      const wantTranslation = translationFieldWanted();
 
       // Set loading states (only for sections the user has enabled)
       if (settings.enableDefinitions && defSlider) {
         defSlider.textContent = '';
         defSlider.appendChild(createContentPage('Loading...'));
       }
-      if (settings.enableTranslations && transSlider) {
+      if (wantTranslation && transSlider) {
         transSlider.textContent = '';
         transSlider.appendChild(createContentPage('Loading...'));
       }
@@ -1080,10 +1096,18 @@
         const defContainer = getCachedSelector('defContainer', '.definition-section .content-container');
         if (defContainer) smoothHeightTransition(defContainer, 60, true);
       }
-      if (settings.enableTranslations) {
+      if (wantTranslation) {
         const transContainer = getCachedSelector('transContainer', '.translation-section .content-container');
         if (transContainer) smoothHeightTransition(transContainer, 80, true);
       }
+
+      // What the pronounce control plays. The dictionary provider's own
+      // recording is held here rather than shown, because the Wiktionary page
+      // knows which recording matches the reader's Target language and costs no
+      // extra request - so its answer replaces this one wherever it has one, and
+      // this one still stands when the Translation Field is off, suppressed, or
+      // unreachable.
+      let pronunciation = '';
 
       if (settings.enableDefinitions) {
         try {
@@ -1095,7 +1119,7 @@
           if (defResponse.success) {
             renderDefinitionPages(defResponse.data.defs);
             renderSynAnt(defResponse.data.synonyms, defResponse.data.antonyms);
-            updatePronunciation(defResponse.data.audio);
+            pronunciation = defResponse.data.audio;
           } else {
             defSlider.textContent = '';
             if (defResponse.error === ERROR_MESSAGES.SOURCE_NOT_ENGLISH) {
@@ -1118,15 +1142,19 @@
         }
       }
 
-      if (settings.enableTranslations) {
+      if (wantTranslation) {
         try {
           const transResponse = await sendMessage({
             type: MESSAGE_TYPES.GET_TRANSLATION,
-            text: currentSelection
+            word: currentSelection
           });
 
           if (transResponse.success) {
             renderTranslationPages(transResponse.data.translations);
+            // The same page yielded the Translation Field and the recording, so
+            // a bundled Lookup - which the dictionary provider cannot serve
+            // audio for - still gets a pronounce control from here.
+            pronunciation = transResponse.data.audio || pronunciation;
           } else {
             transSlider.textContent = '';
             transSlider.appendChild(createContentPage(transResponse.error, true));
@@ -1139,6 +1167,10 @@
           repositionAfterRender();
         }
       }
+
+      // Last, so that whichever Field supplied the recording decides it and a
+      // Field that failed takes nothing away from the ones that did not.
+      updatePronunciation(pronunciation);
     });
 
     [tooltip, triggerIcon].forEach(el => {

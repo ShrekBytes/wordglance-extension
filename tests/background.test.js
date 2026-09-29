@@ -15,10 +15,10 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { createBackground, jsonResponse, notFound } = require('./harness');
+const { createBackground, jsonResponse, notFound, wikiPage } = require('./harness');
 
 const DICTIONARY = 'api.dictionaryapi.dev';
-const TRANSLATION = 'translation-1e79fb3f3adb.herokuapp.com';
+const WIKTIONARY = 'en.wiktionary.org';
 
 const SETTINGS_KEYS = {
   enableDefinitions: 'wordglance-enable-definitions',
@@ -55,6 +55,70 @@ const dictionaryEntry = (word, overrides = {}) => jsonResponse([
 // from the package before the provider was ever reached. The bundle is covered
 // on its own terms below.
 const NO_BUNDLE = { dictionary: {} };
+
+// --- The Wiktionary page ---------------------------------------------------
+
+// A Wiktionary page reduced to the parts a reader sees. The page is read as raw
+// markup, so this is markup: a headword's English section, its Pronunciation
+// block and a Translations block per Sense, followed by a Danish section that
+// must never be read for an English headword.
+//
+// The Danish section deliberately lists a Bengali equivalent and a Danish
+// recording of the same word, so scoping to the headword's own language is
+// proved wherever these fixtures are used rather than taken on trust.
+//
+// `multitrans` wraps a block in the {{multitrans}} form, which carries the same
+// information in the shape a modern page uses.
+function wiktionaryPage({ pronunciation = '', rows = [], moreRows = [], multitrans = false } = {}) {
+  const block = lines => [
+    '{{trans-top|tool}}',
+    ...(multitrans ? ['{{multitrans|data=', ...lines, '}}'] : lines),
+    '{{trans-bottom}}'
+  ];
+
+  return [
+    '==English==',
+    '',
+    '===Pronunciation===',
+    pronunciation,
+    '',
+    '===Noun===',
+    '{{en-noun}}',
+    '# A [[tool]] with a heavy [[head]] and a [[handle]].',
+    '#: {{ux|en|Bobby used a hammer and nails.}}',
+    '',
+    '====Translations====',
+    ...block(rows),
+    '',
+    '===Verb===',
+    '# To strike repeatedly.',
+    '',
+    '====Translations====',
+    ...block(moreRows),
+    '',
+    '==Danish==',
+    '',
+    '===Pronunciation===',
+    '* {{audio|da|Da-hammer.ogg}}',
+    '',
+    '====Translations====',
+    '{{trans-top|værktøj}}',
+    '* Bengali: {{t+|bn|হাতুড়ি}}',
+    '{{trans-bottom}}',
+    ''
+  ].join('\n');
+}
+
+// A Translation lookup costs one request, and it is to this page.
+const wiktionaryFetch = (markup, status = 200) => url => (
+  url.includes(WIKTIONARY) ? wikiPage(markup, status) : undefined
+);
+
+const BENGALI_ROW = '* Bengali: {{t+|bn|হাতুড়ি}}, {{t|bn|মারিবল}}';
+
+// Most of these tests are about a reader who chose Bangla, and the default Target
+// language is English.
+const READS_BENGLA = { storage: { [SETTINGS_KEYS.targetLanguage]: 'bn' } };
 
 // --- Current behaviour ---------------------------------------------------
 
@@ -188,54 +252,219 @@ test('stored settings win over defaults', async () => {
   assert.equal(response.data.targetLanguage, 'bn');
 });
 
-test('a Translation Lookup returns the destination text and its alternatives', async () => {
+test('a Translation Lookup lists every equivalent for the Target language', async () => {
+  // Several alternatives inside one language is the requirement, not a nicety:
+  // a reader often has to choose between the formal and the colloquial word.
   const background = createBackground({
-    fetch: url => {
-      if (url.includes(TRANSLATION)) {
-        return jsonResponse({
-          'destination-text': 'হাতুড়ি',
-          translations: {
-            'all-translations': [['হাতুড়ি'], ['মারিবল'], ['হাতুড়ি']],
-            'possible-translations': ['অস্ত্র', 'যন্ত্র']
-          }
-        });
-      }
-      return undefined;
-    }
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({ rows: [BENGALI_ROW] }))
   });
 
-  const response = await background.send({ type: 'GET_TRANSLATION', text: 'hammer' });
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'Hammer' });
 
   assert.deepEqual(response, {
     success: true,
-    data: { translations: ['হাতুড়ি', 'মারিবল', 'অস্ত্র', 'যন্ত্র'] }
+    data: { translations: ['হাতুড়ি', 'মারিবল'], audio: '' }
   });
-  assert.equal(background.requestedUrls.length, 1);
-  const url = new URL(background.requestedUrls[0]);
-  assert.equal(url.searchParams.get('dl'), 'en');
-  assert.equal(url.searchParams.get('text'), 'hammer');
-  // 'auto' is the default source, and an auto-detect request must not send `sl`.
-  assert.equal(url.searchParams.get('sl'), null);
+  assert.equal(background.networkUrls.length, 1, 'one page, one request');
+  assert.equal(
+    new URL(background.networkUrls[0]).searchParams.get('title'),
+    'hammer',
+    'the headword, in the case the reader selected it in'
+  );
 });
 
-test('a Translation Lookup is cached per language pair', async () => {
+test('equivalents come back in page order, and only the English section is read', async () => {
+  // Page order is the reader's order, so nothing here sorts or regroups. The
+  // Danish section at the foot of the fixture lists the same Bengali equivalent
+  // and a Danish recording, and neither may reach an English headword's Lookup:
+  // a Bengali equivalent of the Danish word is not a Bengali equivalent of the
+  // English one.
   const background = createBackground({
-    storage: { [SETTINGS_KEYS.sourceLanguage]: 'en', [SETTINGS_KEYS.targetLanguage]: 'bn' },
-    fetch: url => (url.includes(TRANSLATION)
-      ? jsonResponse({ 'destination-text': 'হাতুড়ি' })
-      : undefined)
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      rows: ['* Afrikaans: {{t+|af|hamer}}', BENGALI_ROW, '* German: {{t+|de|Hammer}}'],
+      moreRows: ['* Bengali: {{t+|bn|কুলাহাড়ি}}']
+    }))
   });
 
-  await background.send({ type: 'GET_TRANSLATION', text: 'hammer' });
-  const second = await background.send({ type: 'GET_TRANSLATION', text: 'hammer' });
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
 
-  assert.deepEqual(second.data, { translations: ['হাতুড়ি'] });
-  assert.equal(background.requestedUrls.length, 1);
-  assert.equal(
-    new URL(background.requestedUrls[0]).searchParams.get('sl'),
-    'en',
-    'an explicit source language is sent'
-  );
+  assert.deepEqual(response.data.translations, ['হাতুড়ি', 'মারিবল', 'কুলাহাড়ি']);
+  assert.equal(response.data.audio, '', 'the Danish recording is not the headword’s');
+});
+
+test('the equivalents of a modern page are read out of its multitrans block', async () => {
+  // Two shapes carry the same information on Wiktionary today, and a page uses
+  // whichever its editor did. Both have to read, or most headwords quietly come
+  // back with no Translation at all.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      rows: ['* Afrikaans: {{t+|af|hamer}}', BENGALI_ROW],
+      multitrans: true
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['হাতুড়ি', 'মারিবল']);
+});
+
+test('an equivalent repeated across a headword’s Senses is listed once', async () => {
+  // A word has a Translations block per Sense, and a reader looking at a
+  // formal-versus-colloquial choice is not helped by the same word twice. The
+  // first mention is the one kept, so page order still reads true.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      rows: [BENGALI_ROW],
+      moreRows: [BENGALI_ROW, '* Bengali: {{t+|bn|কুলাহাড়ি}}']
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['হাতুড়ি', 'মারিবল', 'কুলাহাড়ি']);
+});
+
+test('equivalents are capped at the configured limit', async () => {
+  // A reader gets several alternatives to choose between, not a wall of them.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      rows: [Array.from(
+        { length: 12 },
+        (_, i) => `* Bengali: {{t+|bn|হাতুড়ি${i}}}`
+      ).join('\n')]
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(response.data.translations.length, 8);
+  assert.equal(response.data.translations[0], 'হাতুড়ি0', 'page order survives the cap');
+});
+
+test('a dialect’s equivalents are not the language’s', async () => {
+  // A page nests a dialect below the language it is a dialect of, in a row of
+  // its own. Those rows are not the Target language's equivalents - a reader
+  // reading Arabic is reading Arabic, not a variety of it.
+  const background = createBackground({
+    storage: { [SETTINGS_KEYS.targetLanguage]: 'ar' },
+    fetch: wiktionaryFetch(wiktionaryPage({
+      rows: [
+        '* Arabic: {{tt+|ar|مِطْرَقَة|f}}, {{tt|ar|شَاكُوش|m}}',
+        '*: Egyptian Arabic: {{tt|arz|شَاكُوش|m|tr=šakūš}}',
+        '*: Algerian Arabic: {{tt|arq|مطرقة|f}}'
+      ]
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['مِطْرَقَة', 'شَاكُوش']);
+});
+
+test('an equivalent the page writes as a link is shown as the word, not the markup', async () => {
+  // A page spells a word as a link whenever that word is also a page of its own,
+  // which is most of them. Two things go wrong if the markup reaches the reader:
+  // they are shown `[[bəxt|bəxti]]`, and the link's own `|` reads as the
+  // separator between the template's arguments, so the word arrives truncated to
+  // `[[bəxt`.
+  const background = createBackground({
+    storage: { [SETTINGS_KEYS.targetLanguage]: 'az' },
+    fetch: wiktionaryFetch(wiktionaryPage({
+      rows: ['* Azerbaijani: {{t|az|[[bəxt|bəxti]] [[gətirən]]}}, {{t+|az|[[şən]]}} {{q|colloquial}}']
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'happy' });
+
+  assert.deepEqual(response.data.translations, ['bəxti gətirən', 'şən']);
+});
+
+test('a headword with no equivalents for the Target language yields an empty Translation', async () => {
+  // A Field may be empty, and empty is a normal outcome rather than a failure.
+  // The reader is told the absence is real and keeps the Definition they came
+  // for. The Danish section's Bengali row must not stand in for the English
+  // headword's, so this is empty rather than one word.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({ rows: ['* German: {{t+|de|Hammer}}'] }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(response.success, true);
+  assert.deepEqual(response.data, { translations: [], audio: '' });
+});
+
+test('a headword Wiktionary has no page for yields an empty Translation', async () => {
+  // The page not being there and the page not having the word are the same
+  // answer for the reader: there is no equivalent in the Target language. It
+  // is not a connection failure, and it must not be reported as one.
+  const background = createBackground({ fetch: wiktionaryFetch('not a page', 404) });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'xylophone' });
+
+  assert.equal(response.success, true);
+  assert.deepEqual(response.data, { translations: [], audio: '' });
+  assert.equal(background.networkUrls.length, 1);
+});
+
+test('a repeated Translation Lookup issues no further request', async () => {
+  // The cache is keyed by the Target language as well as the headword, because
+  // both Fields read out of the page follow from it. The settings popup clears
+  // this cache when the reader changes it, so a stale answer cannot outlive the
+  // setting that produced it.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({ rows: [BENGALI_ROW] }))
+  });
+
+  const first = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+  const second = await background.send({ type: 'GET_TRANSLATION', word: 'Hammer' });
+
+  assert.deepEqual(second.data, first.data);
+  assert.equal(background.networkUrls.length, 1);
+});
+
+test('the Translation Field is suppressed when Source is set to the Target language', async () => {
+  // The headword is already in the language the reader asked to read it in, so
+  // there is nothing to translate it into. Decided here rather than asked of
+  // Wiktionary, so the answer is the same whichever provider is behind it, and
+  // so a Lookup in this state costs no request at all.
+  const background = createBackground({
+    storage: {
+      [SETTINGS_KEYS.sourceLanguage]: 'bn',
+      [SETTINGS_KEYS.targetLanguage]: 'bn'
+    },
+    fetch: url => {
+      throw new Error('nothing may be requested when the Field is suppressed');
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'জল' });
+
+  assert.equal(response.success, true);
+  assert.deepEqual(response.data, { translations: [], audio: '' });
+  assert.deepEqual(background.requestedUrls, []);
+});
+
+test('an auto-detected Source language is not the Target language', async () => {
+  // 'auto' is a setting, not a language, so it can never be equal to the Target
+  // language the reader chose - and treating it as such would suppress the Field
+  // for the reader who never set a Source language at all.
+  const background = createBackground({
+    storage: { [SETTINGS_KEYS.sourceLanguage]: 'auto', [SETTINGS_KEYS.targetLanguage]: 'en' },
+    fetch: wiktionaryFetch(wiktionaryPage({ rows: ['* English: {{t+|en|hammer}}'] }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['hammer']);
+  assert.equal(background.networkUrls.length, 1);
 });
 
 test('Translations are refused when the feature is off', async () => {
@@ -243,13 +472,221 @@ test('Translations are refused when the feature is off', async () => {
     storage: { [SETTINGS_KEYS.enableTranslations]: false }
   });
 
-  const response = await background.send({ type: 'GET_TRANSLATION', text: 'hammer' });
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
 
   assert.deepEqual(response, {
     success: false,
     error: 'Translations are turned off in settings'
   });
   assert.deepEqual(background.requestedUrls, []);
+});
+
+test('a Translation is refused for a multi-word selection without issuing a request', async () => {
+  // A Lookup is about one headword. The Translation Field is a Field of that
+  // Lookup, not a translation of whatever the reader happened to select, so a
+  // phrase is refused here on the rule the Definition Field already uses.
+  const background = createBackground({ fetch: wiktionaryFetch(wiktionaryPage({ rows: [BENGALI_ROW] })) });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'claw hammer' });
+
+  assert.equal(response.success, false);
+  assert.equal(response.error, 'Please select a valid word to look up');
+  assert.deepEqual(background.requestedUrls, []);
+});
+
+test('a Wiktionary failure is a connection error, not an empty Translation', async () => {
+  // The two must stay distinguishable. Reporting an outage as "no equivalents"
+  // would tell a reader their word has none when the truth is that nothing was
+  // asked.
+  const background = createBackground({
+    fetch: url => {
+      if (url.includes(WIKTIONARY)) throw new Error('offline');
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response, {
+    success: false,
+    error: 'Connection error - please try again'
+  });
+});
+
+test('a Translation Lookup does not read the dictionary', async () => {
+  // The bundle answers Definitions. A reader who only ever translates should
+  // never pay for 5 MB of it, which is what loading it lazily is for.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({ rows: [BENGALI_ROW] }))
+  });
+
+  await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(background.networkUrls.length, 1);
+  assert.ok(!background.requestedUrls.includes(background.bundleUrl));
+});
+
+// --- Pronunciation --------------------------------------------------------
+
+// The audio file names are read out of the same page as the equivalents, so a
+// Lookup that shows a Translation costs no second request for a pronunciation.
+
+test('a recording is read out of the same page as the equivalents', async () => {
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      pronunciation: '* {{IPA|en|/ˈhæmə/|a=RP}}\n** {{audio|en|En-uk-hammer.ogg|a=RP}}',
+      rows: [BENGALI_ROW]
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data, {
+    translations: ['হাতুড়ি', 'মারিবল'],
+    audio: 'https://commons.wikimedia.org/wiki/Special:FilePath/En-uk-hammer.ogg'
+  });
+  assert.equal(background.networkUrls.length, 1, 'the page served both Fields');
+});
+
+test('a headword with no equivalents still yields a pronunciation', async () => {
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      pronunciation: '* {{audio|en|En-us-hammer.ogg|a=US}}',
+      rows: ['* German: {{t+|de|Hammer}}']
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data, {
+    translations: [],
+    audio: 'https://commons.wikimedia.org/wiki/Special:FilePath/En-us-hammer.ogg'
+  });
+});
+
+test('a headword with no recording leaves the pronunciation empty', async () => {
+  // Empty is what hides the pronounce control, which is this Field's documented
+  // empty outcome rather than a broken one.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({ rows: [BENGALI_ROW] }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(response.data.audio, '');
+});
+
+test('a recording qualified with the Target language is preferred', async () => {
+  // The second rung of the preference: among several recordings of one headword,
+  // the one whose language matches what the reader reads, so the accent is
+  // familiar.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      pronunciation: [
+        '* {{audio|en|En-uk-hammer.ogg|a=SSB}}',
+        '* {{audio|en|En-us-hammer.ogg|a=US}}',
+        '* {{audio|bn|Bn-hammer.ogg}}'
+      ].join('\n'),
+      rows: [BENGALI_ROW]
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(
+    response.data.audio,
+    'https://commons.wikimedia.org/wiki/Special:FilePath/Bn-hammer.ogg'
+  );
+});
+
+test('an unqualified recording is preferred over one qualified with the Target language', async () => {
+  // The first rung of the preference. A recording with no language of its own
+  // is the headword's own pronunciation rather than one of a language's, so it
+  // is what a reader gets when the page offers it.
+  const background = createBackground({
+    storage: { [SETTINGS_KEYS.targetLanguage]: 'en' },
+    fetch: wiktionaryFetch(wiktionaryPage({
+      pronunciation: [
+        '* {{audio||hammer.ogg|Audio}}',
+        '* {{audio|en|En-us-hammer.ogg|a=US}}'
+      ].join('\n'),
+      rows: [BENGALI_ROW]
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(
+    response.data.audio,
+    'https://commons.wikimedia.org/wiki/Special:FilePath/hammer.ogg'
+  );
+});
+
+test('the first recording stands when none matches the Target language', async () => {
+  // The last rung: a reader is better served by an accent they do not recognise
+  // than by no pronunciation at all.
+  const background = createBackground({
+    storage: { [SETTINGS_KEYS.targetLanguage]: 'fr' },
+    fetch: wiktionaryFetch(wiktionaryPage({
+      pronunciation: [
+        '* {{audio|en|En-uk-hammer.ogg|a=SSB}}',
+        '* {{audio|en|En-us-hammer.ogg|a=US}}'
+      ].join('\n'),
+      rows: [BENGALI_ROW]
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(
+    response.data.audio,
+    'https://commons.wikimedia.org/wiki/Special:FilePath/En-uk-hammer.ogg'
+  );
+});
+
+test('a file name with spaces resolves to a playable Commons URL', async () => {
+  // Reader-voice recordings carry spaces and brackets, and a URL built by
+  // concatenation would 404 on the way to the file.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      pronunciation: '* {{audio|en|LL-Q1860 (eng)-Back ache-hammer.wav|a=UK}}'
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(
+    response.data.audio,
+    'https://commons.wikimedia.org/wiki/Special:FilePath/' +
+      encodeURIComponent('LL-Q1860_(eng)-Back_ache-hammer.wav')
+  );
+});
+
+test('an accent label is not mistaken for a recording', async () => {
+  // `{{a|en|UK}}` is the shorthand for an accent heading and shares its name with
+  // the shorthand for a recording. It names no file, so a reader must not be
+  // offered one - the pronounce control has to be hidden, not broken.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({
+      pronunciation: [
+        '* {{a|en|UK}}',
+        '** {{IPA|en|/ˈhæmə/|a=RP}}',
+        '* {{a|en|GA}}',
+        '** {{IPA|en|/ˈhæmɚ/|a=US}}'
+      ].join('\n')
+    }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(response.data.audio, '');
 });
 
 test('Definitions are refused when the feature is off', async () => {
@@ -293,24 +730,26 @@ test('clearing the translation cache leaves definitions cached', async () => {
     ...NO_BUNDLE,
     fetch: url => {
       if (url.includes(DICTIONARY)) return dictionaryEntry('hammer');
-      if (url.includes(TRANSLATION)) return jsonResponse({ 'destination-text': 'হাতুড়ি' });
+      if (url.includes(WIKTIONARY)) {
+        return wikiPage(wiktionaryPage({ rows: [BENGALI_ROW] }));
+      }
       return undefined;
     }
   });
 
   await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
-  await background.send({ type: 'GET_TRANSLATION', text: 'hammer' });
+  await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
   await background.send({ type: 'CLEAR_TRANSLATION_CACHE' });
   await background.send({ type: 'GET_DEFINITION', word: 'hammer' });
-  await background.send({ type: 'GET_TRANSLATION', text: 'hammer' });
+  await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
 
   assert.equal(
-    background.requestedUrls.filter(url => url.includes(DICTIONARY)).length,
+    background.networkUrls.filter(url => url.includes(DICTIONARY)).length,
     1,
     'the definition stayed cached'
   );
   assert.equal(
-    background.requestedUrls.filter(url => url.includes(TRANSLATION)).length,
+    background.networkUrls.filter(url => url.includes(WIKTIONARY)).length,
     2,
     'the translation was refetched'
   );
@@ -819,19 +1258,4 @@ test('a bundled Lookup is still refused when the Source language is not English'
 
   assert.equal(response.error, 'Definitions are only available for English words');
   assert.deepEqual(background.requestedUrls, []);
-});
-
-test('a Translation Lookup does not read the dictionary', async () => {
-  // The bundle answers Definitions. A reader who only ever translates should
-  // never pay for 5 MB of it, which is what loading it lazily is for.
-  const background = createBackground({
-    fetch: url => (url.includes(TRANSLATION)
-      ? jsonResponse({ 'destination-text': 'খুশি' })
-      : undefined)
-  });
-
-  await background.send({ type: 'GET_TRANSLATION', text: 'happy' });
-
-  assert.deepEqual(background.requestedUrls.length, 1);
-  assert.ok(!background.requestedUrls.includes(background.bundleUrl));
 });

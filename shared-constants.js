@@ -45,7 +45,11 @@ const SETTINGS_SCHEMA = {
 // permissions declared in manifest.json at a glance.
 const API_ENDPOINTS = {
   DICTIONARY: 'https://api.dictionaryapi.dev/api/v2/entries/en/',
-  TRANSLATION: 'https://translation-1e79fb3f3adb.herokuapp.com/translate'
+  // The headword's Wiktionary page, read as raw markup. `action=raw` serves the
+  // page's own source and answers 404 when there is no page at all, which is
+  // what lets "this word has no equivalents in the reader's Target language" be
+  // told apart from "the request failed". See ADR-0003.
+  WIKTIONARY: 'https://en.wiktionary.org/w/index.php'
 };
 
 // The English dictionary that ships inside the package, relative to the
@@ -59,6 +63,8 @@ const BUNDLED_DICTIONARY = 'data/wordglance-en-dictionary.json.gz';
 
 const MESSAGE_TYPES = {
   GET_DEFINITION: 'GET_DEFINITION',
+  // Answers the Translation Field for one headword, and the pronunciation that
+  // came off the same page with it. See ADR-0003.
   GET_TRANSLATION: 'GET_TRANSLATION',
   GET_SETTINGS: 'GET_SETTINGS',
   CLEAR_CACHE: 'CLEAR_CACHE',
@@ -84,7 +90,6 @@ const ERROR_MESSAGES = {
   NO_TRANSLATION: 'Translation not found',
   NETWORK_ERROR: 'Connection error - please try again',
   INVALID_WORD: 'Please select a valid word to look up',
-  INVALID_TEXT: 'Please select valid text to translate',
   SOURCE_NOT_ENGLISH: 'Definitions are only available for English words',
   DEFINITIONS_DISABLED: 'Definitions are turned off in settings',
   TRANSLATIONS_DISABLED: 'Translations are turned off in settings'

@@ -18,7 +18,12 @@ const zlib = require('node:zlib');
 
 const root = path.resolve(__dirname, '..');
 
-const BACKGROUND_SCRIPTS = ['shared-constants.js', 'shared-utilities.js', 'background.js'];
+const BACKGROUND_SCRIPTS = [
+  'shared-constants.js',
+  'shared-utilities.js',
+  'wiktionary.js',
+  'background.js'
+];
 
 function jsonResponse(body, status = 200) {
   return {
@@ -32,6 +37,19 @@ function jsonResponse(body, status = 200) {
 
 function notFound() {
   return jsonResponse({ success: false, error: 'Not found' }, 404);
+}
+
+// A page of raw markup, which is how a Wiktionary page is read: `action=raw`
+// serves text/x-wiki, not JSON. Not a real `Response` because nothing here
+// streams it.
+function wikiPage(markup, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() {
+      return markup;
+    }
+  };
 }
 
 // Records every URL the background asks for, so a test can assert both what came
@@ -199,4 +217,4 @@ function createBackground({ fetch: handler, storage = {}, dictionary } = {}) {
   };
 }
 
-module.exports = { createBackground, jsonResponse, notFound };
+module.exports = { createBackground, jsonResponse, notFound, wikiPage };

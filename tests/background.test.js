@@ -1413,22 +1413,36 @@ test('no request to any service carries a credential of any kind', async () => {
   }
 });
 
-test('no endpoint is a URL that already holds a credential', async () => {
-  // A key baked into an endpoint constant is the same promise broken in a
-  // different place, and it is invisible in a payload: the request looks like
-  // any other. It is also the shape it would take if someone added a provider
-  // that demanded one, which is exactly the change a reader installing with no
+test('no URL the extension builds is a URL that already holds a credential', async () => {
+  // A key baked into an endpoint is the same promise broken in a different
+  // place, and it is invisible in a payload: the request looks like any other.
+  // It is also the shape it would take if someone added a provider that
+  // demanded one, which is exactly the change a reader installing with no
   // account would silently be unable to make.
-  const endpointSource = readFileSync(path.join(root, 'shared-constants.js'), 'utf8');
+  //
+  // Every file that builds a URL, not just the endpoints file: `wiktionary.js`
+  // assembles the Commons recording URL itself, so a test reading only
+  // `shared-constants.js` would pass on a credential added there.
+  const sources = [
+    'shared-constants.js',
+    'wiktionary.js',
+    'background.js',
+    'content.js',
+    'popup.js'
+  ];
 
-  for (const url of endpointSource.match(/'https:\/\/[^']+'/g) || []) {
-    const { searchParams } = new URL(url.slice(1, -1));
-    for (const name of searchParams.keys()) {
-      assert.doesNotMatch(
-        name,
-        /^(api[-_]?key|key|token|access[-_]?token|client[-_]?secret|auth|sig|signature)$/i,
-        `an endpoint carries a "${name}" parameter, which is a credential in a URL`
-      );
+  for (const file of sources) {
+    const source = readFileSync(path.join(root, file), 'utf8');
+
+    for (const literal of source.match(/['"`]https:\/\/[^'"`]+/g) || []) {
+      const { searchParams } = new URL(literal.slice(1).replace(/\\?['"`].*$/, ''));
+      for (const name of searchParams.keys()) {
+        assert.doesNotMatch(
+          name,
+          /^(api[-_]?key|key|token|access[-_]?token|client[-_]?secret|auth|sig|signature)$/i,
+          `${file} builds a URL carrying a "${name}" parameter, which is a credential`
+        );
+      }
     }
   }
 });

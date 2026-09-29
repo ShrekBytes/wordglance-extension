@@ -27,19 +27,29 @@ const listing = readFileSync(path.join(root, 'firefox-store-description.md'), 'u
 const settings = readFileSync(path.join(root, 'popup.html'), 'utf8');
 const background = readFileSync(path.join(root, 'background.js'), 'utf8');
 
-// Every script the extension ships, and so every host it can reach. The
-// endpoints are named in `shared-constants.js`, but Commons is not: the file
-// name a recording is played from is built in `wiktionary.js`, and a test
+// Every script and stylesheet the extension loads, read rather than listed, so
+// a file added to `manifest.json` - or to the settings page it points at -
+// cannot go unexamined here. A hand-typed file list is a fourth declaration of
+// what the extension contains, and ADR-0006 is about that class of
+// disagreement.
+//
+// The endpoints are named in `shared-constants.js`, but Commons is not: the
+// file name a recording is played from is built in `wiktionary.js`, and a test
 // reading only the constants would not see that the permission behind it is
 // doing anything.
+const popup = manifest.browser_action.default_popup;
 const shipped = [
-  'shared-constants.js',
-  'shared-utilities.js',
-  'wiktionary.js',
-  'background.js',
-  'content.js',
-  'popup.js'
-].map(file => readFileSync(path.join(root, file), 'utf8'));
+  ...manifest.background.scripts,
+  ...manifest.content_scripts.flatMap(content => content.js),
+  popup,
+  // What the settings page pulls in, which the manifest does not enumerate. The
+  // stylesheet is named there and nowhere else, so a test that stops at the
+  // manifest would never see it.
+  ...[...readFileSync(path.join(root, popup), 'utf8')
+    .matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)]
+    .map(([, file]) => file)
+]
+  .map(file => readFileSync(path.join(root, file), 'utf8'));
 
 // The hosts the extension holds a permission for. Everything else it fetches is
 // a file in its own package, which leaves nobody's machine.
@@ -53,21 +63,24 @@ const reachable = shipped.flatMap(source =>
   (source.match(/'https:\/\/[^']+'/g) || []).map(url => new URL(url.slice(1, -1)).host)
 );
 
-// The order a selected word actually travels in, and so the order every document
-// has to list the services in. Declared here rather than derived from the
-// manifest, because the manifest groups its permissions by chain - the
-// Definition chain, then the Translation chain - while a reader reading a list
-// top to bottom is reading the order their word leaves the machine.
+// The order a selected word's requests actually leave the machine in, which is
+// not the order the manifest groups its permissions in.
 //
-// The manifest is not required to be in this order, but it is required to hold
-// a permission for every host here and to hold nothing else, which is what
-// makes the two lists checkable against each other rather than merely against
-// themselves.
-const CHAIN = [
-  'en.wiktionary.org',
-  'commons.wikimedia.org',
+// It is two chains, run in sequence: the Definition Field is resolved and
+// rendered before the Translation Field is even asked for, so a rare word
+// reaches the live provider and the thesaurus before it ever reaches
+// Wiktionary. Presenting the services as one list beginning with Wiktionary -
+// which is what these documents used to do, and what the order test here used
+// to enforce - is true for a common word, which the bundle answers with no
+// request at all, and false for every other one.
+//
+// Commons is absent from this list on purpose: it is reached only when the
+// reader presses the pronounce control, and never as part of a Lookup. Naming
+// it in a sequence would imply a request the extension does not make.
+const LOOKUP_ORDER = [
   'freedictionaryapi.com',
   'api.datamuse.com',
+  'en.wiktionary.org',
   'clients5.google.com',
   'api.mymemory.translated.net',
   'www.bing.com'
@@ -115,7 +128,7 @@ test('the chain and the manifest name the same set of hosts', () => {
   // keeps them honest is the one that compares them. A provider added to the
   // code and permissioned but never added here is a service every document
   // silently omits, which is the failure this whole file exists to catch.
-  for (const host of CHAIN) {
+  for (const host of LOOKUP_ORDER) {
     assert.ok(
       reachable.includes(host),
       `the chain names ${host} but no code fetches it`
@@ -123,9 +136,9 @@ test('the chain and the manifest name the same set of hosts', () => {
   }
   for (const host of hosts) {
     assert.ok(
-      CHAIN.includes(host),
-      `${host} is permissioned but is not in the declared chain, so no document ` +
-      'can be shown to name it'
+      LOOKUP_ORDER.includes(host) || host === 'commons.wikimedia.org',
+      `${host} is permissioned but is in neither the chain nor the pronunciation ` +
+      'lookup, so no document can be shown to name it'
     );
   }
 });
@@ -159,21 +172,22 @@ for (const [name, document] of documents) {
     );
   });
 
-  test(`${name} names the services in the order the chain asks them`, () => {
-    // A reader reading the list top to bottom should be reading the order a
-    // word actually travels in, so the claim "only when the ones before it had
-    // no answer" is checkable rather than decorative. Matched on the host
-    // rather than on the service's name, because a host is unique and a name is
-    // not - "Google" is a word, and so is "Bing" - and the first mention of
-    // each is the one a reader meets first.
-    const positions = CHAIN.map(host => document.indexOf(host));
+  test(`${name} names the services in the order a Lookup reaches them`, () => {
+    // A reader reading down the list should be reading the order their word
+    // leaves the machine, so the claim "only when the ones before it had no
+    // answer" is checkable rather than decorative. Matched on the host rather
+    // than on the service's name, because a host is unique and a name is not -
+    // "Google" is a word, and so is "Bing" - and the first mention of each is
+    // the one a reader meets first.
+    const positions = LOOKUP_ORDER.map(host => document.indexOf(host));
 
     for (const [i, position] of positions.entries()) {
-      assert.ok(position > -1, `${name} does not list ${CHAIN[i]}`);
+      assert.ok(position > -1, `${name} does not list ${LOOKUP_ORDER[i]}`);
       if (i > 0) {
         assert.ok(
           position > positions[i - 1],
-          `${name} lists ${CHAIN[i]} before ${CHAIN[i - 1]}`
+          `${name} lists ${LOOKUP_ORDER[i]} before ${LOOKUP_ORDER[i - 1]}. The ` +
+          'Definition Field is resolved before the Translation Field is asked for.'
         );
       }
     }
@@ -189,13 +203,11 @@ for (const [name, document] of documents) {
       assert.ok(document.includes(credit), `${name} does not credit ${credit}`);
     }
   });
-}
 
-for (const [name, document] of [['the store listing', listing], ['the README', readme]]) {
   test(`${name} does not claim WordGlance runs the services it calls`, () => {
     // It ran none of them. "Our translation API" was never true of a project
-    // with no server, and a disclosure that overstates what the author
-    // controls is a disclosure a reader cannot rely on.
+    // with no server, and a disclosure that overstates what the author controls
+    // is a disclosure a reader cannot rely on.
     assert.ok(
       !/our translation API|our dictionary API/i.test(document),
       `${name} claims an API WordGlance does not run`
@@ -243,21 +255,43 @@ for (const [name, document] of [['the store listing', listing], ['the README', r
 
     // And the positive claim, because removing the old words is not the same as
     // describing what the extension does. CONTEXT.md is explicit that a Lookup
-    // concerns exactly one headword, and this is where a reader meets that.
+    // concerns exactly one headword, and this is where a reader meets that -
+    // in the settings as much as in either document, since a reader who has
+    // installed never has to open the other two.
+    //
+    // The HTML wraps at a column, so the phrase is allowed to straddle a line
+    // break; requiring it on one line would be a test of the editor's
+    // preferences rather than of the claim.
     assert.match(
       document,
-      /Lookup is about .{0,20}one word|Lookup of a single headword/i,
+      /Lookup\s+is\s+about[^.]{0,60}\b(one|single)\b[^.]{0,20}\bword\b/i,
       `${name} does not say that a Lookup is about a single word`
     );
   });
+}
 
-  test(`${name} points a Chromium reader at this extension rather than a userscript`, () => {
-    // ADR-0004 retires the sibling userscript: it fetches from the page, so
-    // CORS applies and every replacement endpoint would have to serve
+// The settings are left out here on purpose: a Chromium reader never sees them,
+// and this is the one claim that exists to catch a reader arriving from the
+// retired userscript looking for where to go next.
+for (const [name, document] of [['the store listing', listing], ['the README', readme]]) {
+  test(`${name} points a Chromium reader here rather than at a userscript`, () => {
+    // ADR-0004 retires the sibling userscript: it fetches from the page, so CORS
+    // applies and every replacement endpoint would have to serve
     // `Access-Control-Allow-Origin`. Sending a reader to it as though it were a
     // working alternative is the one thing worse than saying nothing.
+    //
+    // The link has to be in the sentence that mentions the userscript. Asserting
+    // that the document mentions this repository *anywhere* would pass on the
+    // Firefox badge, and the sentence about the userscript could be deleted
+    // entirely without this failing - which is the one edit that matters here.
+    const mentionsUserscript = /userscript/i;
     assert.ok(
-      /archiv|retired|no longer/i.test(document),
+      mentionsUserscript.test(document),
+      `${name} never mentions the userscript, so no reader is sent from it`
+    );
+    assert.match(
+      document,
+      /userscript[^\n]*\n?[^\n]*(archiv|retired|no longer)|(archiv|retired|no longer)[^\n]*\n?[^\n]*userscript/i,
       `${name} does not say the userscript is archived`
     );
     assert.ok(

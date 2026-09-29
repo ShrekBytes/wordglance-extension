@@ -8,11 +8,13 @@
 */
 
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { existsSync, readFileSync, statSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
 const build = require('../tools/build-dictionary');
+
+const root = path.resolve(__dirname, '..');
 
 const FREQUENCY_SAMPLE = [
   'the 100000',
@@ -544,11 +546,11 @@ test('an ETag compares equal however the server quotes it', () => {
 
 // Skipped when the artefact has not been built yet, so a fresh clone can run the
 // test suite without a 3.3 GB download first.
-const ARTEFACT = path.resolve(__dirname, '..', 'data', 'wordglance-en-dictionary.json.gz');
-const built = fs.existsSync(ARTEFACT);
+const ARTEFACT = path.join(root, 'data', 'wordglance-en-dictionary.json.gz');
+const built = existsSync(ARTEFACT);
 
 test('the committed artefact is the size the refresh document claims', { skip: !built }, () => {
-  const compressed = fs.statSync(ARTEFACT).size;
+  const compressed = statSync(ARTEFACT).size;
   const mb = compressed / 1e6;
 
   // ADR-0002 measured 215 bytes per headword gzipped and expected 4.3 MB. The
@@ -572,7 +574,7 @@ test('the committed artefact is well inside the AMO package limit', { skip: !bui
   // 5 MB against a 200 MB limit, so this is not close. It is here so a future
   // decision to widen the cut-off trips it rather than being discovered at
   // submission.
-  assert.ok(fs.statSync(ARTEFACT).size < 100e6);
+  assert.ok(statSync(ARTEFACT).size < 100e6);
 });
 
 test('the committed artefact carries a build date and a coverage figure', { skip: !built }, () => {
@@ -674,8 +676,8 @@ test('no headword carries the same Sense twice', { skip: !built }, () => {
 // line that is not. Slicing to a fixed offset would silently start asserting
 // on a different step the day someone reformats the file above it.
 function releaseBuildFileList() {
-  const workflow = fs.readFileSync(
-    path.resolve(__dirname, '..', '.github', 'workflows', 'build-and-release-xpi.yml'),
+  const workflow = readFileSync(
+    path.join(root, '.github', 'workflows', 'build-and-release-xpi.yml'),
     'utf8'
   );
 
@@ -695,7 +697,8 @@ function releaseBuildFileList() {
     .split('\n')
     .slice(1)
     .flatMap(line => line.trim().replace(/\\$/, '').split(/\s+/))
-    .filter(path => path && path !== '\\');
+    // `path` would shadow the module binding this file uses everywhere else.
+    .filter(entry => entry && entry !== '\\');
 }
 
 test('the packaged dictionary is in the release build', { skip: !built }, () => {
@@ -723,20 +726,27 @@ test('every file the manifest loads is in the release build', () => {
   // `WiktionaryUtils is not defined` on the first Translation - which is every
   // Translation, and every pronunciation. It fails only in a browser, only for
   // a reader, and only after install. See ADR-0006.
+  //
+  // The settings page counts, and so does the stylesheet it loads: the manifest
+  // names the page, and only the page names the stylesheet, so a list derived
+  // from the manifest alone would leave the one file it does not mention to a
+  // hand-typed entry - which is the disagreement this test exists to prevent.
   const packed = releaseBuildFileList();
-  const manifest = JSON.parse(
-    fs.readFileSync(path.resolve(__dirname, '..', 'manifest.json'), 'utf8')
-  );
+  const manifest = JSON.parse(readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+  const popup = manifest.browser_action.default_popup;
 
   const loaded = [
     ...manifest.background.scripts,
-    ...manifest.content_scripts.flatMap(content => content.js)
+    ...manifest.content_scripts.flatMap(content => content.js),
+    popup,
+    ...[...readFileSync(path.join(root, popup), 'utf8')
+      .matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)].map(([, file]) => file)
   ];
 
-  for (const script of loaded) {
+  for (const file of loaded) {
     assert.ok(
-      packed.includes(script),
-      `${script} is loaded by the manifest but is not in the XPI file list, ` +
+      packed.includes(file),
+      `${file} is loaded by the extension but is not in the XPI file list, ` +
       'so a published build cannot read it'
     );
   }
@@ -744,5 +754,5 @@ test('every file the manifest loads is in the release build', () => {
 
 function readArtefact() {
   const zlib = require('node:zlib');
-  return JSON.parse(zlib.gunzipSync(fs.readFileSync(ARTEFACT)).toString('utf8'));
+  return JSON.parse(zlib.gunzipSync(readFileSync(ARTEFACT)).toString('utf8'));
 }

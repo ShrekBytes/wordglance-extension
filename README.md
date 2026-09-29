@@ -73,7 +73,7 @@ Requires Firefox 142 or later.
 
 - **Desktop**: Works with mouse selection, keyboard shortcuts, and double-click
 - **Mobile**: Double-tap to select a word, or long-press and drag over it
-- A Lookup is about **one word**. The 📖 icon does not appear for a phrase or a sentence, and WordGlance never translates a passage — it shows that word's equivalents in your target language, not a rendering of what you selected
+- A Lookup is about **one word**. The 📖 icon does not appear for a phrase or a sentence, and WordGlance never translates a passage — it shows that word's equivalents in your target language, not a translation of what you selected
 - Press **Escape** to dismiss the tooltip
 - Supports **40+ target languages** including Spanish, French, German, Chinese, Japanese, Arabic, and more
 
@@ -105,15 +105,16 @@ Click the extension icon to access settings:
 
 **What's sent, and where:** the word you selected, and nothing else. No account, no analytics, no cookies, and nothing about you stored anywhere but your own machine. WordGlance runs no servers of its own, doesn't log your lookups, and keeps your settings, cache, and per-site on/off list in Firefox's local storage, where they stay.
 
-**A common word reaches nobody.** WordGlance ships its own English dictionary inside the extension — 19,555 of the commonest English words, covering 98.6% of the words you will meet in running text — so a common word is answered from the package without a request leaving your machine. Which services a word *does* reach depends on what it is missing — every one below is only contacted after the one before it came up empty:
+**A common word reaches nobody.** WordGlance ships its own English dictionary inside the extension — 19,555 of the commonest English words, covering 98.6% of the words you will meet in running text — so a common word is answered from the package without a request leaving your machine. Which services a word *does* reach depends on what it is missing. Your Definitions are resolved first and your Translation is asked for afterwards, and within each, a service is contacted only after the one before it came up empty:
 
-- **[Wiktionary](https://en.wiktionary.org/)** (`en.wiktionary.org`) — every Translation. The word goes to its own page, which also carries the pronunciation recording.
-- **[Wikimedia Commons](https://commons.wikimedia.org/)** (`commons.wikimedia.org`) — only when you press the pronunciation button. It receives the recording's file name, not the word.
 - **[Free Dictionary API](https://freedictionaryapi.com/)** (`freedictionaryapi.com`) — only for a word the bundled dictionary has no entry for. It receives the word and the language you are reading it in.
 - **[Datamuse](https://www.datamuse.com/)** (`api.datamuse.com`) — only when neither of those has synonyms or antonyms to show. It receives the word.
+- **[Wiktionary](https://en.wiktionary.org/)** (`en.wiktionary.org`) — every Translation. The word goes to its own page, which also carries the pronunciation recording.
 - **[Google](https://translate.google.com/)** (`clients5.google.com`) — only when Wiktionary lists no equivalent of your word in your target language. It receives the word and your language choice.
 - **[MyMemory](https://mymemory.translated.net/)** (`api.mymemory.translated.net`) — only if Google doesn't answer.
 - **[Bing](https://www.bing.com/translator)** (`www.bing.com`) — only if neither Google nor MyMemory answers. It issues an anonymous session token, which WordGlance echoes back with your word. No sign-in and no cookie is involved.
+
+**Wikimedia Commons** (`commons.wikimedia.org`) sits outside that sequence: it is contacted only when you press the pronunciation button, and it receives the recording's file name rather than your word.
 
 The host in backticks after each name is the one that actually receives your word, which is not always the one the name suggests. The last three are free machine-translation services, reached only for a word Wiktionary has no equivalent of, and each only when the one before it didn't answer. They are what stops a gap in Wiktionary's coverage from leaving the Translation Field empty. The last two answer with a single word where Wiktionary would have offered you several to choose between, so a Translation from one of them is a fallback, and a rougher one. `[Why they are there](docs/adr/0005-machine-translation-fallback-chain.md)` records the reasoning, including the terms those services impose on automated access.
 
@@ -126,7 +127,6 @@ Turning Definitions or Translations off in settings stops those requests entirel
 - `storage` - save your settings and cache locally
 - `activeTab` - read the current tab's hostname so the per-site toggle knows which site you're on
 - Access to `en.wiktionary.org`, `commons.wikimedia.org`, `freedictionaryapi.com`, `api.datamuse.com`, `clients5.google.com`, `api.mymemory.translated.net`, and `www.bing.com` - the seven services above, and nothing else
-
 ## ❓ Common questions
 
 **Q: Is it free?**  

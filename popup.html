@@ -102,25 +102,31 @@
           <summary class="disclosure-summary">Where your word goes, and where the data comes from</summary>
           <div class="disclosure-body">
             <p>
-              The word you select is the only thing that leaves your browser. No account, no
+              The word you select is the only thing that leaves your browser, and a Lookup is
+              about one word — the 📖 button does not appear for a phrase. No account, no
               analytics, no cookies, and nothing about you stored anywhere but this machine.
               WordGlance runs no servers of its own and logs nothing.
             </p>
             <p>
               A common English word reaches nobody at all: definitions, examples, synonyms and
               antonyms for the 19,555 commonest English words are served from a dictionary bundled
-              inside the extension. Which services a word <em>does</em> reach depends on what it is
-              missing — each is contacted only after the one before it came up empty.
+              inside the extension. Your Definitions are resolved first and your Translation is
+              asked for afterwards. Within each, a service is contacted only after the one before
+              it came up empty.
             </p>
             <ol class="disclosure-chain">
-              <li><span class="disclosure-service">Wiktionary</span> <span class="disclosure-host">en.wiktionary.org</span> — every Translation, for the word's equivalents in your target language, and its pronunciation</li>
-              <li><span class="disclosure-service">Wikimedia Commons</span> <span class="disclosure-host">commons.wikimedia.org</span> — only when you press the pronunciation button, for the recording's file name</li>
               <li><span class="disclosure-service">Free Dictionary API</span> <span class="disclosure-host">freedictionaryapi.com</span> — only for a word the bundled dictionary does not carry</li>
               <li><span class="disclosure-service">Datamuse</span> <span class="disclosure-host">api.datamuse.com</span> — only when neither has synonyms or antonyms to show</li>
+              <li><span class="disclosure-service">Wiktionary</span> <span class="disclosure-host">en.wiktionary.org</span> — every Translation, for the word's equivalents in your target language, and its pronunciation</li>
               <li><span class="disclosure-service">Google</span> <span class="disclosure-host">clients5.google.com</span> — only when Wiktionary lists no equivalent of your word in your target language</li>
               <li><span class="disclosure-service">MyMemory</span> <span class="disclosure-host">api.mymemory.translated.net</span> — only if Google doesn't answer</li>
               <li><span class="disclosure-service">Bing</span> <span class="disclosure-host">www.bing.com</span> — only if neither Google nor MyMemory answers. It issues an anonymous session token, which WordGlance echoes back with your word. No sign-in and no cookie is involved</li>
             </ol>
+            <p>
+              <strong>Wikimedia Commons</strong> (<span class="disclosure-host">commons.wikimedia.org</span>)
+              sits outside that sequence: it is contacted only when you press the pronunciation button,
+              and it receives the recording's file name rather than your word.
+            </p>
             <p>
               The last three are free machine-translation fallbacks, reached only for a word
               Wiktionary has no equivalent of. MyMemory and Bing answer with a single word where

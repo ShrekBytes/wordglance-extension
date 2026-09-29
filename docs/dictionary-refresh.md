@@ -343,6 +343,51 @@ none of those change while the browser runs. And the read carries no timeout:
 background page part-way through inflating 5 MB would send every Definition in
 that session to the provider because the machine was briefly busy.
 
+**Checked in a real browser, with no network at all.** The test suite cannot
+answer the question that matters most about a packaged read, because the harness
+serves the artefact itself: there is no network in the harness at all. So this
+was measured in Firefox Developer Edition 157.0b5, one browser per condition and
+**the same XPI in every condition**, with the package's `data/` listing measured
+before the browser started — because a run that varies the package as well as the
+network cannot attribute a failure to either. Each run drove a real Lookup with
+real mouse input, on `happy` (in the bundle) and `pickaxe` (not in it), and read
+the result from a screenshot.
+
+| Condition | A provider fetch | Packaged read | `happy`'s Definitions |
+| --- | --- | --- | --- |
+| Live network | 200, 7,275 bytes | 200, 4,990,142 bytes | from the bundle |
+| Browser offline mode | `NetworkError` | 200, 4,990,142 bytes | from the bundle |
+| Loopback-only network namespace | `NetworkError` | 200, 4,990,142 bytes | from the bundle |
+| Dead proxy | `NetworkError` | 200, 4,990,142 bytes | from the bundle |
+| **Control: no `data/` in the package, same namespace** | `NetworkError` | **`NetworkError`** | **`Connection error - please try again`** |
+
+The offline promise holds. The second row is a real offline condition rather
+than an instrument: Firefox's own offline mode, `Services.io.offline = true`,
+which is what the hamburger menu and airplane mode set, with `navigator.onLine`
+false in the page. The Definition Field showed the bundle's own Senses while the
+Translation Field reported its connection error, which is the split the design
+asks for, and a second run read the same 4,990,142 bytes.
+
+The namespace was not the cause. The last row is a control: the same namespace,
+the same two headwords, and a package built without `data/`. It reproduces the
+symptom an earlier check reported — `happy` answering `Connection error - please
+try again`, which is only reachable when the packaged read returned nothing and
+every provider was unreachable — and `dist/` still holds two 3.5.1 packages with
+no `data/` directory at all. What is established is therefore two things rather
+than one: a loopback-only namespace does not by itself stop Gecko serving a
+`moz-extension://` read, and a package without `data/` produces exactly that
+symptom. Which package that earlier run loaded is not recorded anywhere, so
+naming it as the cause would be a guess — and a stale artefact in `dist/` is a
+better candidate than the namespace, not a proven one. Issue #24 is the stale
+artefact.
+
+One limit worth stating: the error text does not separate the two causes, because
+a file that is not there and a network that is not there both fail as
+`NetworkError when attempting to fetch resource.` That is why the package is
+measured rather than inferred from the failure. None of this is in the test
+suite, because the check needs a real browser and reconstructing the harness is
+most of the work, and `loadBundle` is unchanged on the strength of it.
+
 **`data/` is in the XPI.** The release workflow zips an explicit file list, so
 the artefact being committed is not by itself evidence that it ships. A test
 asserts the file list contains it, because the failure otherwise is a published

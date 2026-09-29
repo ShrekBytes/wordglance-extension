@@ -124,6 +124,9 @@ const ERROR_MESSAGES = {
   NO_TRANSLATION: 'Translation not found',
   NETWORK_ERROR: 'Connection error - please try again',
   INVALID_WORD: 'Please select a valid word to look up',
+  // These two answer the message contract, not a reader: content.js checks the
+  // setting before it sends anything, so no reader is shown either sentence.
+  // ADR-0007 has the reasoning.
   DEFINITIONS_DISABLED: 'Definitions are turned off in settings',
   TRANSLATIONS_DISABLED: 'Translations are turned off in settings'
 };

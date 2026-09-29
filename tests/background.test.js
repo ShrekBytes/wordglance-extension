@@ -579,7 +579,8 @@ test('an auto-detected Source language is not the Target language', async () => 
   assert.equal(background.networkUrls.length, 1);
 });
 
-test('Translations are refused when the feature is off', async () => {
+test('the message contract refuses a Translation Lookup when the reader has turned Translations off', async () => {
+  // The contract, not a reader: content.js checks the setting first. ADR-0007.
   const background = createBackground({
     storage: { [SETTINGS_KEYS.enableTranslations]: false }
   });
@@ -1465,7 +1466,8 @@ test('the ranked provider is asked in the reader’s Source language when they n
   );
 });
 
-test('Definitions are refused when the feature is off', async () => {
+test('the message contract refuses a Definition Lookup when the reader has turned Definitions off', async () => {
+  // The contract, not a reader: content.js checks the setting first. ADR-0007.
   const background = createBackground({
     storage: { [SETTINGS_KEYS.enableDefinitions]: false }
   });
@@ -2010,9 +2012,9 @@ test('an entry with no Senses falls through to the provider', async () => {
   assert.equal(background.networkUrls.length, 1);
 });
 
-test('a bundled Lookup is still refused when Definitions are turned off', async () => {
+test('the contract refuses a bundled Lookup too - the bundle is not a way around a turned-off Field', async () => {
   // The bundle is an answer to a Definition Lookup, not a bypass of the
-  // reader's settings.
+  // reader's settings. The contract again, as above. ADR-0007.
   const background = createBackground({
     storage: { 'wordglance-enable-definitions': false }
   });

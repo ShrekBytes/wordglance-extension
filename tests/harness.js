@@ -81,11 +81,13 @@ function wikiPage(markup, status = 200) {
 // response and a packaged file actually are.
 function createNetwork(handler) {
   const urls = [];
+  const sent = [];
   let packaged = null;
 
-  const fetchImpl = async (url) => {
+  const fetchImpl = async (url, options) => {
     const target = String(url);
     urls.push(target);
+    sent.push(options);
     if (packaged && target === packaged.url) {
       return new Response(packaged.bytes());
     }
@@ -96,6 +98,7 @@ function createNetwork(handler) {
   return {
     fetchImpl,
     urls,
+    sent,
     // `bytes` is a thunk so the 5 MB artefact is only read by a test that
     // actually asks the background for a Definition.
     servePackage(url, bytes) {
@@ -238,6 +241,15 @@ function createBackground({ fetch: handler, storage = {}, dictionary } = {}) {
     /** URLs requested, in order. Grows as the test awaits `send`. */
     get requestedUrls() {
       return [...network.urls];
+    },
+    /**
+     * The options every request was made with, in the same order as
+     * `requestedUrls`. A test asserting that a request carried no credential -
+     * no cookie, no API key - asserts on this, because nothing in the payload
+     * says so: the promise is kept by the extension not asking for it.
+     */
+    get requestOptions() {
+      return [...network.sent];
     },
     /**
      * URLs requested over the network, in order - everything the background

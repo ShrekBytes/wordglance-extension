@@ -19,6 +19,13 @@ const CONFIG = {
   maxMirrorFieldLength: 20000,
   cacheSize: 500,
   apiTimeout: 10000,
+  // A shorter budget for the Translation Field's fallback chain, which asks up
+  // to three more providers after the primary. The full timeout on each of them
+  // would let a Lookup that is going to come up empty hold the reader for half
+  // a minute to learn so, which is the failure the old dead provider caused and
+  // the one this chain exists to stop repeating. A fallback that cannot answer
+  // in four seconds is a fallback that is down.
+  fallbackTimeout: 4000,
   debounceDelay: 100,
   cacheSaveDelay: 2000 // Debounce cache saving
 };
@@ -243,19 +250,19 @@ class LRUCache {
   }
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url, options = {}, timeout = CONFIG.apiTimeout) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CONFIG.apiTimeout);
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
     const response = await fetch(url, {
       ...options,
       signal: controller.signal
     });
-    clearTimeout(timeout);
+    clearTimeout(timeoutId);
     return response;
   } catch (error) {
-    clearTimeout(timeout);
+    clearTimeout(timeoutId);
     throw error;
   }
 }

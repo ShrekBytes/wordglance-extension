@@ -448,11 +448,216 @@ async function fetchDefinition(word) {
   return payload;
 }
 
-// What a Lookup has to say when there is nothing to say: no Translation Field
-// and no recording. One literal, because both of the paths that reach it - a
-// suppressed Field and a headword Wiktionary has no page for - mean the same to
-// a reader.
+// What a Translation Lookup has to say when the reader has asked for nothing:
+// their Source language is set to their Target language, so the headword is
+// already in the language they asked to read it in. Decided here, before any
+// request, so the Lookup costs nothing at all.
 const NOTHING_TO_TRANSLATE = { translations: [], audio: '' };
+
+// --- The Translation Field's fallbacks -------------------------------------
+//
+// Three free machine-translation providers behind the headword's Wiktionary
+// page, asked in order when that page carries no equivalent in the reader's
+// Target language. ADR-0005 records the ordering, the risk that all three are
+// undocumented endpoints whose terms prohibit automated access, and why a
+// failed request from one of them is the next one being asked rather than the
+// Lookup failing.
+
+// A request whose only purpose is to find out whether one provider is
+// answering: the response when it succeeded, and null for anything else - a
+// refused request, a server error, a timeout. A body the extension cannot read
+// is a failure of the body rather than of the request, and fails where it is
+// read.
+//
+// The chain's shorter request budget is applied here so that a hop cannot
+// forget it: a provider that cannot answer in four seconds is a provider that
+// is down, and the chain may ask four of them.
+async function askProvider(url, options = {}) {
+  try {
+    const res = await fetchWithTimeout(url, options, CONFIG.fallbackTimeout);
+    return res.ok ? res : null;
+  } catch (e) {
+    console.warn('Translation fallback error:', e);
+    return null;
+  }
+}
+
+// A provider's body as the JSON it serves, or null. The parse is a failure of
+// its own - a challenge page and an outage page both arrive with a healthy
+// status - and it means the same as the request failing: no answer here to
+// read.
+async function askJson(url) {
+  const res = await askProvider(url);
+  if (!res) return null;
+  try {
+    return await res.json();
+  } catch (e) {
+    console.warn('Translation fallback error:', e);
+    return null;
+  }
+}
+
+// One word as a Translation Field of one, or none when there is no word. The
+// two providers answering with a single string answer with the same shape, so
+// the shape is decided once rather than in both of them.
+const oneWord = word => (typeof word === 'string' && word.trim() ? [word.trim()] : []);
+
+// The language a provider is asked to translate from: the reader's own Source
+// language where they have named one, and `unasked` otherwise.
+//
+// Those are not the same word, and the caller says which of the two it wants.
+// One provider can work the language out for itself and is asked to, because
+// the reader's Source language is 'auto' more often than not and a headword
+// read off a Japanese page as English is worse than no Translation at all. The
+// other two name a source language or refuse the request outright - `auto` is
+// not a language either of them serves - and are told English, which is the
+// language the Wiktionary page is read in anyway, so a source the reader never
+// named is the same word either way.
+function translationSource(unasked) {
+  return settings.sourceLanguage === 'auto' ? unasked : settings.sourceLanguage;
+}
+
+// The alternatives the first provider ranked for a headword, best first.
+//
+// Its answer is an array whose dictionary block sits at a fixed position: the
+// headword, a null, and then the ranked alternatives, each of which is a list
+// whose own first element is the word.
+//
+// The block also ends with metadata - the ranges the alternatives cover, the
+// headword again, two counts - and those are left out by not being lists of
+// that shape rather than by counting entries, so a block that grows a field
+// costs this Field rather than the Lookup around it. The headword is one of
+// the words that survives, and the echo rule in the chain below is what drops
+// it. A headword the provider has no dictionary entry for answers with no
+// block at all.
+function readRanked(body) {
+  const entry = Array.isArray(body) ? body[5] : null;
+  const ranked = entry && Array.isArray(entry[2]) ? entry[2] : [];
+  return ranked
+    .map(alternative => (Array.isArray(alternative) ? alternative[0] : ''))
+    .filter(word => typeof word === 'string' && word.trim())
+    .map(word => word.trim());
+}
+
+// The first provider: one GET, answering with a ranked list.
+async function rankedAlternatives(key) {
+  const query = new URLSearchParams({
+    client: 'dict-chrome-ex',
+    sl: translationSource('auto'),
+    tl: settings.targetLanguage,
+    dt: 'at',
+    q: key
+  });
+  return readRanked(await askJson(`${API_ENDPOINTS.RANKED_ALTERNATIVES}?${query}`));
+}
+
+// The one word the second provider has.
+//
+// It answers a request it could not serve with a status of its own and a
+// human-readable complaint where the word would be - "INVALID LANGUAGE PAIR
+// SPECIFIED" and the like. The status is what says whether there is a word
+// here, and the text is only read once the status says so: a reader whose
+// Target language this vendor does not carry would otherwise be shown the
+// complaint as their Translation.
+function readSingle(body) {
+  if (!body || body.responseStatus !== 200) return [];
+  return oneWord(body.responseData && body.responseData.translatedText);
+}
+
+// The second provider: a different vendor on a different host, one GET.
+async function singleTranslation(key) {
+  const query = new URLSearchParams({
+    q: key,
+    langpair: `${translationSource('en')}|${settings.targetLanguage}`
+  });
+  return readSingle(await askJson(`${API_ENDPOINTS.SINGLE_TRANSLATION}?${query}`));
+}
+
+// The session token the third provider will not answer without, read out of the
+// page it hands it out on.
+//
+// A translator that serves a challenge instead of that page, or serves it
+// without the token, has nothing here to find - which is this hop failing, and
+// exactly what the other two failing looks like.
+const VENDOR_TOKEN = /IG:"([A-F0-9]+)"/i;
+
+async function vendorSession() {
+  const res = await askProvider(API_ENDPOINTS.VENDOR_TRANSLATION_SESSION);
+  if (!res) return '';
+  try {
+    const token = VENDOR_TOKEN.exec(await res.text());
+    return token ? token[1] : '';
+  } catch (e) {
+    console.warn('Translation fallback session error:', e);
+    return '';
+  }
+}
+
+// The one word the third vendor has. An answer that is not a list holding one
+// translated string is this provider saying something other than an answer - a
+// challenge, most often - and is a failure like any other.
+//
+// No cookie rides along with either request. The token is the whole of what
+// this hop has, and a reader's session on somebody else's site has no business
+// travelling with a word they selected.
+async function vendorTranslation(key) {
+  const token = await vendorSession();
+  if (!token) return [];
+
+  const res = await askProvider(API_ENDPOINTS.VENDOR_TRANSLATION, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      fromLang: translationSource('en'),
+      text: key,
+      to: settings.targetLanguage,
+      IG: token,
+      IID: 'translator.5028.1'
+    })
+  });
+  if (!res) return [];
+
+  try {
+    const answer = await res.json();
+    return oneWord(Array.isArray(answer) && answer[0] ? answer[0].text : '');
+  } catch (e) {
+    console.warn('Translation fallback error:', e);
+    return [];
+  }
+}
+
+// The fallbacks, in the order they are asked. A provider answering with a
+// ranked list comes before one answering with a single string and never after
+// it: several alternatives inside one Target language is a requirement rather
+// than a nicety, so a single string is a fallback and is not reached while a
+// ranked provider is available.
+const TRANSLATION_FALLBACKS = [rankedAlternatives, singleTranslation, vendorTranslation];
+
+// Whether a word a provider returned is the headword back again. Case alone,
+// because the headword has already been normalised and lowercased into the key,
+// and a provider's word is not a reader's selection - so HeadwordUtils, which
+// decides what a reader may select, has no say here.
+const sameWord = (word, key) => word.toLowerCase() === key;
+
+// The words the chain has for a headword, or none when every provider came up
+// empty.
+//
+// A word identical to the headword is dropped wherever it appears. A machine
+// translator handed a Bengali word and asked for Bengali hands the word
+// straight back, and showing a reader the word they selected as its own
+// Translation is the one thing this Field must never do. The Source-equals-
+// Target setting is suppressed before any request is made, so this catches the
+// case that setting cannot: a reader who left their Source language on
+// automatic and selected a word already in their Target language. A word that
+// really is spelled the same in both languages is lost to it, and the page
+// above is where such a word is answered instead.
+async function fallbackTranslations(key) {
+  for (const ask of TRANSLATION_FALLBACKS) {
+    const words = (await ask(key)).filter(word => !sameWord(word, key));
+    if (words.length) return words;
+  }
+  return [];
+}
 
 async function fetchTranslation(word) {
   const key = headwordKey(word);
@@ -484,30 +689,48 @@ async function fetchTranslation(word) {
   // distinction from the server failure below is load-bearing - reporting an
   // outage as "no equivalents" would tell a reader their word has none when
   // nothing was ever asked.
-  if (res.status === 404) {
-    return NOTHING_TO_TRANSLATE;
-  }
-  if (!res.ok) {
+  if (res.status !== 404 && !res.ok) {
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
 
+  let page;
   try {
-    const markup = await res.text();
-
-    const result = {
-      translations: WiktionaryUtils
-        .readTranslations(markup, settings.targetLanguage)
-        .slice(0, CONFIG.maxTranslations),
+    // No page is an empty page. Everything the page carries is then nothing, and
+    // the chain below is asked for the equivalents the page did not have.
+    const markup = res.status === 404 ? '' : await res.text();
+    page = {
+      translations: WiktionaryUtils.readTranslations(markup, settings.targetLanguage),
       audio: WiktionaryUtils.readAudio(markup, settings.targetLanguage)
     };
-
-    // Cache result and trigger debounced save
-    caches.translations.set(cacheKey, result);
-    saveCaches();
-    return result;
   } catch (e) {
     throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
   }
+
+  // Wiktionary answered, and it has nothing for this reader's Target language.
+  // That is the coverage gap the fallbacks are for, and the only thing that
+  // starts the chain: a page carrying several equivalents never costs a request
+  // to the providers behind it.
+  const translations = page.translations.length
+    ? page.translations
+    : await fallbackTranslations(key);
+
+  // An empty Translation is not remembered. Three providers being down at the
+  // same moment is a fact about the moment rather than about the word, and
+  // remembering it would tell the reader their word has no Translation until
+  // the browser next starts - which is the very outage the chain exists to
+  // absorb. The Definition chain follows the same rule by throwing its
+  // not-found rather than caching it.
+  if (!translations.length) return { translations: [], audio: page.audio };
+
+  const result = {
+    translations: translations.slice(0, CONFIG.maxTranslations),
+    audio: page.audio
+  };
+
+  // Cache result and trigger debounced save
+  caches.translations.set(cacheKey, result);
+  saveCaches();
+  return result;
 }
 
 browser.runtime.onMessage.addListener(async (msg) => {

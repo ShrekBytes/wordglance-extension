@@ -504,13 +504,21 @@ test('a headword Wiktionary has no page for yields an empty Translation', async 
   // The page not being there and the page not having the word are the same
   // answer for the reader: there is no equivalent in the Target language. It
   // is not a connection failure, and it must not be reported as one.
+  //
+  // Every provider answers 404 here, so the whole chain is asked and comes up
+  // empty - which is the not-found the Field prints beside the Definitions the
+  // reader did get.
   const background = createBackground({ fetch: wiktionaryFetch('not a page', 404) });
 
   const response = await background.send({ type: 'GET_TRANSLATION', word: 'xylophone' });
 
   assert.equal(response.success, true);
   assert.deepEqual(response.data, { translations: [], audio: '' });
-  assert.equal(background.networkUrls.length, 1);
+  assert.equal(
+    background.networkUrls.length,
+    4,
+    'the page, then the whole chain, with nothing stopping it early'
+  );
 });
 
 test('a repeated Translation Lookup issues no further request', async () => {
@@ -787,6 +795,524 @@ test('an accent label is not mistaken for a recording', async () => {
   const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
 
   assert.equal(response.data.audio, '');
+});
+
+// --- The machine-translation chain ----------------------------------------
+
+// What sits behind the Translation Field when the headword's Wiktionary page
+// has no equivalent in the reader's Target language. Three providers, asked in
+// order, stopping at the first that answers: one ranking several alternatives,
+// then one on a different host answering with a single string, then a different
+// vendor answering with a single string. ADR-0005 records why they are in that
+// order.
+//
+// Every test here asserts the hosts asked, not only the answer. A chain that
+// stops early and a chain that sends a reader's word to everybody look the
+// same from the Tooltip.
+
+const RANKED = 'clients5.google.com';
+const SINGLE = 'api.mymemory.translated.net';
+const VENDOR = 'www.bing.com';
+
+const hostOf = url => new URL(url).host;
+
+// The ranked provider's answer, in the shape it serves: a sentence translation,
+// the language it detected, and a dictionary block holding the headword and
+// then its ranked alternatives.
+//
+// The block ends with metadata - the ranges the alternatives cover, the
+// headword again, two counts - which is what makes the position worth pinning
+// down. A reader that stopped one entry early would show a range as a word, and
+// one that read the whole block as alternatives would show numbers.
+function rankedResponse(headword, alternatives) {
+  return jsonResponse([
+    [['', '', null, null, 3]],
+    null,
+    'en',
+    null,
+    null,
+    [
+      headword,
+      null,
+      [
+        ...alternatives.map((word, i) => [word, null, true, false, [3 + i]]),
+        [[0, 6]],
+        headword,
+        0,
+        0
+      ]
+    ],
+    1,
+    [],
+    [['en'], null, [1], ['en']]
+  ]);
+}
+
+// A headword the ranked provider has no dictionary entry for. It answers
+// normally, with no dictionary block at all, which is a hop with nothing to
+// offer rather than a hop that failed.
+const noDictionaryEntry = () => jsonResponse([
+  [['', '', null, null, 5]], null, 'bn', null, null, null, 1, [], [['bn'], null, [1], ['bn']]
+]);
+
+// The single-string provider's answer, and the refusal it answers a language
+// pair it cannot serve with: a status of its own, and a human-readable
+// complaint sitting exactly where the word would be.
+const singleResponse = word => jsonResponse({
+  responseData: { translatedText: word, match: 0.98 },
+  responseStatus: 200
+});
+
+const singleRefusal = () => jsonResponse({
+  responseData: {
+    translatedText: "'XX' IS AN INVALID SOURCE LANGUAGE . EXAMPLE: LANGPAIR=EN|IT USING 2 LETTER ISO"
+  },
+  responseStatus: 403
+});
+
+// The third vendor hands out a session token on a page of its own and will not
+// answer a request that has not been shown it. Read as text, like a Wiktionary
+// page, so the same fixture shape serves both.
+const VENDOR_SESSION_PAGE = 'var _g_toggles={};IG:"81F6391073264FF4A07A36E4DF427794";';
+const VENDOR_WORD = [{ from: 'en', to: 'bn', text: 'হাতুড়ি' }];
+
+// A network for the chain. Each provider answers with whatever it was given, and
+// one given nothing answers 404 - which is this hop being over, and is how a
+// provider that is down, or has no word for the headword, looks from out here.
+//
+// `markup` is the headword's page and `page` its status, so the no-page case
+// needs no second shape. `session` is the page the third vendor hands its
+// session token out on.
+function chainNetwork({ markup = '', page = 200, ranked, single, session, vendor } = {}) {
+  return url => {
+    if (url.includes(WIKTIONARY)) return wikiPage(markup, page);
+    if (url.includes(RANKED)) return ranked || notFound();
+    if (url.includes(SINGLE)) return single || notFound();
+    if (url.includes(VENDOR)) {
+      return url.includes('/translator') ? (session || wikiPage('no token on this page')) : vendor;
+    }
+    return undefined;
+  };
+}
+
+// Every provider asked and the whole chain empty. What the reader is told is the
+// Field's own not-found, never a connection error: nothing they can act on has
+// failed, and the Definitions they came for stay on screen beside it.
+const CHAIN_CAME_UP_EMPTY = {
+  success: true,
+  data: { translations: [], audio: '' }
+};
+
+test('a headword with no Wiktionary equivalent falls through to the ranked provider', async () => {
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({ ranked: rankedResponse('hammer', ['হাতুড়ি', 'হ্যামার']) })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['হাতুড়ি', 'হ্যামার']);
+  assert.deepEqual(
+    background.networkUrls.map(hostOf),
+    [WIKTIONARY, RANKED],
+    'the page, then one provider, and nothing further'
+  );
+  assert.equal(
+    new URL(background.networkUrls[1]).searchParams.get('tl'),
+    'bn',
+    'asked for the reader’s Target language'
+  );
+});
+
+test('no single-string provider is consulted while the ranked one is available', async () => {
+  // The ordering rule, which is the whole design: several alternatives inside
+  // one Target language is a requirement, and a provider answering with one
+  // string can never satisfy it. So it is not reached while a ranked provider is
+  // answering - which is also why reaching for it would be a reader's word sent
+  // to a service with no reason to see it.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: url => {
+      if (url.includes(WIKTIONARY)) return wikiPage('');
+      if (url.includes(RANKED)) return rankedResponse('hammer', ['হাতুড়ি', 'হ্যামার']);
+      throw new Error('a single-string provider was consulted while a ranked one answered');
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['হাতুড়ি', 'হ্যামার']);
+  assert.equal(background.networkUrls.length, 2);
+});
+
+test('a failure of the ranked provider falls through to the single-string one', async () => {
+  // A provider that is down costs the reader the alternatives it would have
+  // given, and nothing else.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({ single: singleResponse('হাতুড়ি') })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['হাতুড়ি'], 'one result is accepted');
+  assert.deepEqual(background.networkUrls.map(hostOf), [WIKTIONARY, RANKED, SINGLE]);
+  assert.equal(
+    new URL(background.networkUrls[2]).searchParams.get('langpair'),
+    'en|bn',
+    'the pair names the reader’s Source and Target languages'
+  );
+});
+
+test('a failure of the single-string provider falls through to the second vendor', async () => {
+  // The last hop answers with a single string too, and is a different vendor
+  // from the first - so two providers being down is not the end of the Field.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({
+      session: wikiPage(VENDOR_SESSION_PAGE),
+      vendor: jsonResponse(VENDOR_WORD)
+    })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['হাতুড়ি']);
+  assert.deepEqual(background.networkUrls.map(hostOf), [
+    WIKTIONARY, RANKED, SINGLE, VENDOR, VENDOR
+  ]);
+});
+
+test('a provider that is down ends that hop rather than the Lookup', async () => {
+  // A refused request, a body nobody can read, and a refusal with a status are
+  // all the same failure, and the chain moves on through every one of them.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: url => {
+      if (url.includes(WIKTIONARY)) return wikiPage('');
+      if (url.includes(RANKED)) throw new Error('offline');
+      if (url.includes(SINGLE)) return unreadableBody();
+      if (url.includes(VENDOR)) {
+        return url.includes('/translator') ? wikiPage(VENDOR_SESSION_PAGE) : notFound();
+      }
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response, CHAIN_CAME_UP_EMPTY);
+  assert.deepEqual(
+    background.networkUrls.map(hostOf),
+    [WIKTIONARY, RANKED, SINGLE, VENDOR, VENDOR],
+    'each hop ended at its own failure and the Lookup still came back'
+  );
+});
+
+test('a provider with no dictionary entry for the headword is a hop with nothing to offer', async () => {
+  // It answered, and normally - it simply has no block of alternatives. As far
+  // as the chain is concerned that is a failure, so the next provider is asked
+  // rather than the reader being shown nothing.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({
+      ranked: noDictionaryEntry(),
+      single: singleResponse('খুশি')
+    })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'happy' });
+
+  assert.deepEqual(response.data.translations, ['খুশি']);
+  assert.deepEqual(background.networkUrls.map(hostOf), [WIKTIONARY, RANKED, SINGLE]);
+});
+
+test('a provider that refuses the language pair is a failure, not a Translation', async () => {
+  // The refusal arrives where the word would be, as a sentence explaining that
+  // the pair is one this vendor cannot serve. Reading the text without reading
+  // the status would show a reader that sentence as their Translation.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({ single: singleRefusal() })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, []);
+  assert.deepEqual(
+    background.networkUrls.map(hostOf),
+    [WIKTIONARY, RANKED, SINGLE, VENDOR],
+    'the refusal ended that hop rather than being shown'
+  );
+});
+
+test('a translator that hands out no session token is a failure of the last hop', async () => {
+  // The page the token is read out of is a page the vendor serves in place of
+  // an answer - a challenge, most often. There is no token in it to find, so
+  // the hop is over rather than a request going out with nothing to send.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({ session: wikiPage('<html>Are you a robot?</html>') })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, []);
+  assert.deepEqual(background.networkUrls.map(hostOf), [WIKTIONARY, RANKED, SINGLE, VENDOR]);
+});
+
+test('a word identical to the headword is not shown as its own Translation', async () => {
+  // A machine translator handed a Bengali word and asked for Bengali hands the
+  // word straight back. The Source-equals-Target setting is suppressed before
+  // any request, so this is the case that setting cannot reach: a reader who
+  // left their Source language on automatic and selected a word already in their
+  // Target language. The echo is dropped and the other alternative stands.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({ ranked: rankedResponse('জল', ['জল', 'পানি']) })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'জল' });
+
+  assert.deepEqual(response.data.translations, ['পানি']);
+});
+
+test('an echo and nothing else ends that hop rather than showing the headword', async () => {
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({
+      ranked: rankedResponse('জল', ['জল']),
+      single: singleResponse('পানি')
+    })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'জল' });
+
+  assert.deepEqual(response.data.translations, ['পানি']);
+});
+
+test('every provider failing is a not-found, not a connection error', async () => {
+  const background = createBackground({ ...READS_BENGLA, fetch: chainNetwork() });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'zzzqqq' });
+
+  assert.deepEqual(response, CHAIN_CAME_UP_EMPTY);
+  assert.notEqual(
+    response.error,
+    'Connection error - please try again',
+    'the two must not collapse into one message'
+  );
+});
+
+test('the whole chain refusing outright is still a not-found', async () => {
+  // Every provider refusing is the failure the chain exists for. Nothing the
+  // reader can act on has gone wrong, and the Definitions they came for are
+  // still on screen beside an empty Field.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: url => {
+      if (url.includes(WIKTIONARY)) return wikiPage('');
+      throw new Error('every provider is refusing this address');
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'zzzqqq' });
+
+  assert.deepEqual(response, CHAIN_CAME_UP_EMPTY);
+});
+
+test('a Wiktionary failure does not start the chain', async () => {
+  // The chain covers a coverage gap, and only a coverage gap. A request that
+  // failed or came back with a server status has told the reader nothing about
+  // their word, and the distinction between "no equivalents" and "the request
+  // failed" is load-bearing - so this stops where it stopped before the chain
+  // existed, and a reader whose network is down is not told their word has no
+  // Translation.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: url => {
+      if (url.includes(WIKTIONARY)) return jsonResponse({ error: 'boom' }, 500);
+      throw new Error('the chain is not started by a Wiktionary failure');
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response, {
+    success: false,
+    error: 'Connection error - please try again'
+  });
+  assert.equal(background.networkUrls.length, 1);
+});
+
+test('a page with equivalents costs the chain no request at all', async () => {
+  // The chain exists for a gap Wiktionary does not fill. A reader whose word the
+  // page covers is answered by the page, and their selected word is not sent to
+  // three machine-translation vendors they had no reason to involve.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: wiktionaryFetch(wiktionaryPage({ rows: [BENGALI_ROW] }))
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data.translations, ['হাতুড়ি', 'মারিবল']);
+  assert.equal(background.networkUrls.length, 1);
+});
+
+test('a recording survives a Translation the chain supplied', async () => {
+  // The recording is read out of the Wiktionary page and the equivalents are
+  // not. Asking the chain for what the page lacked must not cost the reader the
+  // pronunciation the page had: the two Fields stay independent.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({
+      markup: wiktionaryPage({
+        pronunciation: '* {{audio|en|En-uk-hammer.ogg|a=RP}}',
+        rows: ['* German: {{t+|de|Hammer}}']
+      }),
+      ranked: rankedResponse('hammer', ['হাতুড়ি', 'হ্যামার'])
+    })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response.data, {
+    translations: ['হাতুড়ি', 'হ্যামার'],
+    audio: 'https://commons.wikimedia.org/wiki/Special:FilePath/En-uk-hammer.ogg'
+  });
+});
+
+test('a chain answer is capped at the configured limit', async () => {
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({
+      ranked: rankedResponse('hammer', Array.from({ length: 12 }, (_, i) => `হাতুড়ি${i}`))
+    })
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(response.data.translations.length, 8);
+  assert.equal(response.data.translations[0], 'হাতুড়ি0', 'ranking survives the cap');
+});
+
+test('a repeated Lookup does not walk the chain again', async () => {
+  // The chain is three requests in the worst case, so a Lookup that answered
+  // must not ask them all again for a word already looked up.
+  const answered = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({ ranked: rankedResponse('hammer', ['হাতুড়ি', 'হ্যামার']) })
+  });
+
+  const first = await answered.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+  const second = await answered.send({ type: 'GET_TRANSLATION', word: 'Hammer' });
+
+  assert.deepEqual(second.data, first.data);
+  assert.equal(answered.networkUrls.length, 2);
+});
+
+test('an empty Translation is not remembered', async () => {
+  // An outage is not a fact about the word. Caching the empty answer would tell
+  // the reader their word has no Translation until the browser next starts,
+  // which is the very failure the chain exists to absorb - and the Definition
+  // chain avoids it the same way, by throwing its not-found rather than
+  // caching it. So a reader who hits a bad moment and selects the word again
+  // gets a second chance.
+  const background = createBackground({ ...READS_BENGLA, fetch: chainNetwork() });
+
+  await background.send({ type: 'GET_TRANSLATION', word: 'zzzqqq' });
+  const second = await background.send({ type: 'GET_TRANSLATION', word: 'zzzqqq' });
+
+  assert.deepEqual(second.data, { translations: [], audio: '' });
+  assert.equal(background.networkUrls.length, 8, 'the whole chain was asked again');
+});
+
+test('the chain does not end when the last vendor serves a challenge', async () => {
+  // A challenge arrives with a healthy status and a body that is not the JSON
+  // this provider serves, so the parse fails rather than the request. The last
+  // hop is the one most likely to be broken, and it must fail the same way as
+  // the other two rather than taking the Lookup with it.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: url => {
+      if (url.includes(WIKTIONARY)) return wikiPage('');
+      if (url.includes(VENDOR)) {
+        return url.includes('/translator')
+          ? wikiPage(VENDOR_SESSION_PAGE)
+          : unreadableBody();
+      }
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response, CHAIN_CAME_UP_EMPTY);
+  assert.deepEqual(background.networkUrls.map(hostOf), [WIKTIONARY, RANKED, SINGLE, VENDOR, VENDOR]);
+});
+
+test('a last vendor whose page will not load ends that hop there', async () => {
+  // The session page is a request like any other, and it can be the one that
+  // fails. Nothing goes out to the translator with no token to send, and the
+  // Lookup comes back with an empty Field rather than an error.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: url => {
+      if (url.includes(WIKTIONARY)) return wikiPage('');
+      if (url.includes(VENDOR)) throw new Error('offline');
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.deepEqual(response, CHAIN_CAME_UP_EMPTY);
+  assert.deepEqual(
+    background.networkUrls.map(hostOf),
+    [WIKTIONARY, RANKED, SINGLE, VENDOR],
+    'the session page failed, so no translation request was made with no token'
+  );
+});
+
+test('no cookie rides along with a word the reader selected', async () => {
+  // The session token is the whole of what the last hop has. A reader's
+  // session on somebody else's site has no business travelling with a word they
+  // selected, and the manifest's promise - settings and cache stay on the
+  // machine - depends on nothing here reaching for one.
+  const background = createBackground({
+    ...READS_BENGLA,
+    fetch: chainNetwork({
+      session: wikiPage(VENDOR_SESSION_PAGE),
+      vendor: jsonResponse(VENDOR_WORD)
+    })
+  });
+
+  await background.send({ type: 'GET_TRANSLATION', word: 'hammer' });
+
+  assert.equal(
+    background.requestOptions.filter(options => options && options.credentials).length,
+    0,
+    'no request to any provider carried a credential'
+  );
+});
+
+test('the ranked provider is asked in the reader’s Source language when they named one', async () => {
+  // It can detect a language, but the reader has already said which one they are
+  // reading in, and their word is in it. The two providers that cannot detect
+  // are told the same language for the same reason.
+  const background = createBackground({
+    ...READS_BENGLA_SOURCE,
+    fetch: chainNetwork({ ranked: rankedResponse('জল', ['পানি']) })
+  });
+
+  await background.send({ type: 'GET_TRANSLATION', word: 'জল' });
+
+  assert.equal(
+    new URL(background.networkUrls[1]).searchParams.get('sl'),
+    'bn',
+    'the language the reader named'
+  );
 });
 
 test('Definitions are refused when the feature is off', async () => {

@@ -64,7 +64,26 @@ const API_ENDPOINTS = {
   // page's own source and answers 404 when there is no page at all, which is
   // what lets "this word has no equivalents in the reader's Target language" be
   // told apart from "the request failed". See ADR-0003.
-  WIKTIONARY: 'https://en.wiktionary.org/w/index.php'
+  WIKTIONARY: 'https://en.wiktionary.org/w/index.php',
+  // The machine-translation fallbacks, in the order the chain asks them. A
+  // language and the headword are appended after these.
+  //
+  // The first is asked first because it answers with a ranked list of
+  // alternatives, which several alternatives inside one Target language
+  // requires and which a single string can never satisfy. The second is a
+  // different vendor on a different host. The third is a different vendor
+  // again, and is asked last because it hands out a session token on a page of
+  // its own and will not answer without it.
+  //
+  // All three are undocumented endpoints whose terms prohibit automated access.
+  // That risk is accepted knowingly and recorded in ADR-0005, which is also
+  // where the chain's ordering and its failure semantics are written down.
+  RANKED_ALTERNATIVES: 'https://clients5.google.com/translate_a/single',
+  SINGLE_TRANSLATION: 'https://api.mymemory.translated.net/get',
+  VENDOR_TRANSLATION: 'https://www.bing.com/ttranslatev3',
+  // The page VENDOR_TRANSLATION takes its session token from, and which is
+  // therefore fetched before it.
+  VENDOR_TRANSLATION_SESSION: 'https://www.bing.com/translator'
 };
 
 // The English dictionary that ships inside the package, relative to the

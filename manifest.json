@@ -15,7 +15,10 @@
     "https://freedictionaryapi.com/*",
     "https://api.datamuse.com/*",
     "https://en.wiktionary.org/*",
-    "https://commons.wikimedia.org/*"
+    "https://commons.wikimedia.org/*",
+    "https://clients5.google.com/*",
+    "https://api.mymemory.translated.net/*",
+    "https://www.bing.com/*"
   ],
   "browser_specific_settings": {
     "gecko": {

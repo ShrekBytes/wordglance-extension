@@ -1668,6 +1668,24 @@ const SENSES = {
   }
 };
 
+// A headword the artefact carries with only one of the two relations, which is
+// the shape two in ten of the real artefact's headwords have: Wiktionary lists
+// Antonyms far less often than Synonyms, so a Sense with Synonyms and no
+// Antonyms is ordinary rather than defective, and it is the case that the
+// thesaurus is there to cover.
+const ONE_SIDED_SENSES = {
+  meta: META,
+  entries: {
+    happy: [{
+      pos: 'adj',
+      definitions: ['Having a feeling arising from well-being or enjoyment.'],
+      examples: ['Music makes me feel happy.'],
+      synonyms: ['cheerful', 'content'],
+      antonyms: []
+    }]
+  }
+};
+
 test('a common English word resolves all four Fields with no network request', async () => {
   const background = createBackground({
     fetch: () => {
@@ -2060,8 +2078,15 @@ test('a headword is asked of the provider in the reader’s Source language firs
     { definition: 'জলের রস', partOfSpeech: 'noun', example: '' }
   ]);
   assert.deepEqual(response.data.synonyms, ['বারি', 'সলিল', 'রস']);
+  // The Bengali Senses carry Synonyms and no Antonyms, so the Antonym Field is
+  // the one the thesaurus is asked for - and its index is English, so a
+  // Bengali headword gets nothing back from it. The request is still made: it
+  // is not the extension's business to know in advance that a headword has no
+  // Antonyms in a language its thesaurus does not carry.
+  assert.deepEqual(response.data.antonyms, []);
   assert.deepEqual(background.networkUrls, [
-    `https://freedictionaryapi.com/api/v1/entries/bn/${encodeURIComponent('জল')}`
+    `https://freedictionaryapi.com/api/v1/entries/bn/${encodeURIComponent('জল')}`,
+    `https://api.datamuse.com/words?rel_ant=${encodeURIComponent('জল')}&max=6`
   ]);
 });
 
@@ -2128,12 +2153,15 @@ test('a cached answer in one Source language is not served for another', async (
   const background = createBackground({
     ...NO_BUNDLE,
     ...READS_BENGLA_SOURCE,
-    fetch: perLanguage({
+    // The thesaurus answers the way it answers a word in its index it does not
+    // carry: 200 with an empty list. That is a word it has nothing for, which it
+    // remembers; a 404 would be a request that failed, which it does not.
+    fetch: url => (url.includes(THESAURUS) ? thesaurusWords() : perLanguage({
       bn: BN_JOL(),
       hi: dictionaryResponse('जल', [dictionaryEntry('noun', [
         dictionarySense('जल', { examples: ['एक गिलास पानी पिएँ।'], synonyms: ['पानी'] })
       ], { language: { code: 'hi', name: 'Hindi' } })])
-    })
+    })(url))
   });
 
   const bengali = await background.send({ type: 'GET_DEFINITION', word: 'জল' });
@@ -2142,8 +2170,13 @@ test('a cached answer in one Source language is not served for another', async (
 
   assert.equal(bengali.data.defs[0].definition, 'পানি');
   assert.equal(hindi.data.defs[0].definition, 'जल');
+  // Each language's answer asks the thesaurus only for the relation it is
+  // missing - and is asked only once for the headword, because what the
+  // thesaurus has to say about a word's Antonyms does not depend on which
+  // language the Definition beside it came from.
   assert.deepEqual(background.networkUrls, [
     `https://freedictionaryapi.com/api/v1/entries/bn/${encodeURIComponent('জল')}`,
+    `https://api.datamuse.com/words?rel_ant=${encodeURIComponent('জল')}&max=6`,
     `https://freedictionaryapi.com/api/v1/entries/hi/${encodeURIComponent('জল')}`
   ]);
 });
@@ -2307,18 +2340,210 @@ test('the thesaurus is not consulted when the provider has relations', async () 
   assert.equal(background.networkUrls.length, 1);
 });
 
-test('the thesaurus is not consulted when the bundle answers', async () => {
+test('the thesaurus is not consulted when the bundle carries both relations', async () => {
+  // The offline promise, and the case it is actually about: 'happy' is a
+  // headword Wiktionary lists Synonyms and Antonyms for, so the artefact has no
+  // gap for the thesaurus to fill and this Lookup never leaves the machine.
   const background = createBackground({
     fetch: () => {
-      throw new Error('the bundle answers a common word, so no provider may be reached');
+      throw new Error('the bundle answers this word in full, so nothing may be requested');
     }
   });
 
   const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
 
   assert.equal(response.success, true);
-  assert.ok(response.data.synonyms.length > 0, 'the bundled Senses supplied the relations');
+  assert.ok(response.data.synonyms.length > 0, 'the bundled Senses supplied the Synonyms');
+  assert.ok(response.data.antonyms.length > 0, 'the bundled Senses supplied the Antonyms');
   assert.deepEqual(background.networkUrls, []);
+});
+
+// The gap itself, and the ordinary shape it has: Wiktionary lists Antonyms far
+// less often than Synonyms, so "has one relation and not the other" is what most
+// one-sided headwords look like. The bundle answers such a Lookup on its own -
+// Definition, Example and Synonyms all with no request - and the thesaurus is
+// asked for the one Field the artefact has nothing for, and nothing else.
+test('the thesaurus fills the one relation the bundle is missing', async () => {
+  const background = createBackground({
+    dictionary: ONE_SIDED_SENSES,
+    fetch: url => (relationOf(url) === 'rel_ant' ? thesaurusWords('miserable') : undefined)
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  assert.deepEqual(response.data.synonyms, ['cheerful', 'content'], 'the bundle’s Synonyms, untouched');
+  assert.deepEqual(response.data.antonyms, ['miserable']);
+  assert.deepEqual(background.networkUrls, [
+    'https://api.datamuse.com/words?rel_ant=happy&max=6'
+  ], 'the Synonyms the bundle had were not asked for again');
+});
+
+// The other direction, because the two relations are two Fields and the gate
+// used to be written over both of them at once.
+test('the thesaurus fills the one relation the provider is missing', async () => {
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) {
+        return dictionaryResponse('good', [
+          dictionaryEntry('adjective', [
+            dictionarySense('To the desired or required quality.', { synonyms: ['fine'] })
+          ])
+        ]);
+      }
+      if (url.includes(THESAURUS)) return thesaurusWords('bad');
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'good' });
+
+  assert.deepEqual(response.data.synonyms, ['fine'], 'the provider’s Synonyms, untouched');
+  assert.deepEqual(response.data.antonyms, ['bad']);
+  assert.deepEqual(background.networkUrls, [
+    'https://freedictionaryapi.com/api/v1/entries/en/good',
+    'https://api.datamuse.com/words?rel_ant=good&max=6'
+  ]);
+});
+
+// The other direction of the fill, so that "asked for the relation it is
+// missing" is a claim about the Field and not about Antonyms in particular.
+test('the thesaurus fills missing Synonyms and leaves Antonyms alone', async () => {
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) {
+        return dictionaryResponse('rich', [
+          dictionaryEntry('adjective', [
+            dictionarySense('Having much wealth.', { antonyms: ['poor'] })
+          ])
+        ]);
+      }
+      if (url.includes(THESAURUS)) return thesaurusWords('wealthy');
+      return undefined;
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'rich' });
+
+  assert.deepEqual(response.data.synonyms, ['wealthy']);
+  assert.deepEqual(response.data.antonyms, ['poor'], 'the provider’s Antonyms, untouched');
+  assert.deepEqual(background.networkUrls, [
+    'https://freedictionaryapi.com/api/v1/entries/en/rich',
+    'https://api.datamuse.com/words?rel_syn=rich&max=6'
+  ]);
+});
+
+// A Field a source did fill is left exactly as it was. The thesaurus's words are
+// about the headword as a whole where a Sense's are about that Sense, so
+// appending them would trade a short list that is true of this meaning for a
+// longer one that is not - and would silently reorder the Sense's own words
+// below words from a different source.
+test('a relation the source did fill is not topped up from the thesaurus', async () => {
+  const background = createBackground({
+    ...NO_BUNDLE,
+    fetch: url => {
+      if (url.includes(DICTIONARY)) {
+        return dictionaryResponse('happy', [
+          dictionaryEntry('adjective', [
+            dictionarySense('Feeling well-being.', { synonyms: ['cheerful'], antonyms: ['blue'] })
+          ])
+        ]);
+      }
+      throw new Error('the source supplied both relations, so nothing may be requested');
+    }
+  });
+
+  const response = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  assert.deepEqual(response.data.synonyms, ['cheerful']);
+  assert.deepEqual(response.data.antonyms, ['blue']);
+  assert.deepEqual(background.networkUrls.length, 1, 'the one-word list was left alone');
+});
+
+// The reason the thesaurus is remembered separately from the definitions: the
+// bundle answers before that cache is read, so a word whose Antonyms came from
+// here has to have them remembered somewhere that is actually consulted, or every
+// Lookup of it pays for the same request again.
+test('a relation filled in for the bundle is remembered, so a repeat Lookup asks again for nothing', async () => {
+  const background = createBackground({
+    dictionary: ONE_SIDED_SENSES,
+    fetch: url => (relationOf(url) === 'rel_ant' ? thesaurusWords('miserable') : undefined)
+  });
+
+  const first = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+  const second = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  assert.deepEqual(background.networkUrls, [
+    'https://api.datamuse.com/words?rel_ant=happy&max=6'
+  ], 'the second Lookup issued no request at all');
+  assert.deepEqual(first.data, second.data);
+  assert.deepEqual(first.data.antonyms, ['miserable'], 'the remembered words are the ones shown');
+});
+
+// A thesaurus that fails has not said this word has no relations, and caching
+// that reading turns one outage into a blank Field for the rest of the session -
+// the reader's word is never asked about again. Measured in a real browser: look
+// a word up while Datamuse is unreachable, and it keeps showing no Antonyms long
+// after the network is back.
+test('a thesaurus failure is not remembered as the thesaurus having nothing', async () => {
+  let offline = true;
+  const background = createBackground({
+    dictionary: ONE_SIDED_SENSES,
+    fetch: url => {
+      if (offline) throw new Error('offline');
+      return relationOf(url) === 'rel_ant' ? thesaurusWords('miserable') : undefined;
+    }
+  });
+
+  const during = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+  assert.deepEqual(during.data.antonyms, [], 'a failed request leaves the Field empty');
+
+  offline = false;
+  const after = await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  assert.deepEqual(after.data.antonyms, ['miserable'], 'the next Lookup asked again, and was answered');
+  assert.deepEqual(background.networkUrls, [
+    'https://api.datamuse.com/words?rel_ant=happy&max=6',
+    'https://api.datamuse.com/words?rel_ant=happy&max=6'
+  ], 'asked once per Lookup, and only while it kept failing');
+});
+
+// The other half of that distinction, which is the reason the two are not the
+// same fact: a thesaurus that answers and has nothing IS remembered, because it
+// will keep having nothing. Without this the fix above would re-ask on every
+// Lookup of every word the thesaurus has no opinion about.
+test('a thesaurus that answers with nothing is remembered', async () => {
+  const background = createBackground({
+    dictionary: ONE_SIDED_SENSES,
+    // 200 with an empty list, which is how the thesaurus answers a word in its
+    // index it does not carry. An answer, not a failure.
+    fetch: url => (relationOf(url) === 'rel_ant' ? thesaurusWords() : undefined)
+  });
+
+  await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+  await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  // The request count is the whole assertion: a second request would mean the
+  // empty answer had not been remembered. Reading the persisted copy instead
+  // would be a test of the cache-save debounce rather than of this.
+  assert.equal(background.networkUrls.length, 1, 'the second Lookup issued no request');
+});
+
+// Clearing the cache has to take the thesaurus with it, or a reader who clears
+// their cached words keeps being served the relations they asked to forget -
+// while the Definitions beside them do come from the provider again.
+test('clearing the cache makes the next Lookup ask the thesaurus again', async () => {
+  const background = createBackground({
+    dictionary: ONE_SIDED_SENSES,
+    fetch: url => (relationOf(url) === 'rel_ant' ? thesaurusWords('miserable') : undefined)
+  });
+
+  await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+  await background.send({ type: 'CLEAR_CACHE' });
+  await background.send({ type: 'GET_DEFINITION', word: 'happy' });
+
+  assert.equal(background.networkUrls.length, 2, 'the thesaurus was asked once per Lookup');
 });
 
 test('a thesaurus failure leaves the relations empty rather than failing the Lookup', async () => {

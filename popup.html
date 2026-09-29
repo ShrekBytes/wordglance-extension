@@ -108,15 +108,17 @@
               WordGlance runs no servers of its own and logs nothing.
             </p>
             <p>
-              A common English word reaches nobody at all: definitions, examples, synonyms and
-              antonyms for the 19,555 commonest English words are served from a dictionary bundled
-              inside the extension. Your Definitions are resolved first and your Translation is
-              asked for afterwards. Within each, a service is contacted only after the one before
-              it came up empty.
+              A common English word comes from a dictionary bundled inside the extension:
+              definitions, examples, synonyms and antonyms for the 19,555 commonest English
+              words are read from the package. Where it carries only one of synonyms or
+              antonyms, which is most words, WordGlance asks Datamuse for the one it is
+              missing — once, and remembers the answer. Your Definitions are resolved first
+              and your Translation is asked for afterwards. Within each, a service is
+              contacted only after the one before it came up empty.
             </p>
             <ol class="disclosure-chain">
               <li><span class="disclosure-service">Free Dictionary API</span> <span class="disclosure-host">freedictionaryapi.com</span> — only for a word the bundled dictionary does not carry</li>
-              <li><span class="disclosure-service">Datamuse</span> <span class="disclosure-host">api.datamuse.com</span> — only when neither has synonyms or antonyms to show</li>
+              <li><span class="disclosure-service">Datamuse</span> <span class="disclosure-host">api.datamuse.com</span> — for whichever of synonyms or antonyms neither has to show</li>
               <li><span class="disclosure-service">Wiktionary</span> <span class="disclosure-host">en.wiktionary.org</span> — every Translation, for the word's equivalents in your target language, and its pronunciation</li>
               <li><span class="disclosure-service">Google</span> <span class="disclosure-host">clients5.google.com</span> — only when Wiktionary lists no equivalent of your word in your target language</li>
               <li><span class="disclosure-service">MyMemory</span> <span class="disclosure-host">api.mymemory.translated.net</span> — only if Google doesn't answer</li>

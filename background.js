@@ -7,7 +7,12 @@ const settings = SettingsUtils.createDefaults();
 
 const caches = {
   definitions: new LRUCache(),
-  translations: new LRUCache()
+  translations: new LRUCache(),
+  // The thesaurus's answers, keyed per headword per relation, and kept apart
+  // from the definitions because a thesaurus answer outlives the Lookup that
+  // asked for it: the bundle answers before the definitions cache is read, so a
+  // relation remembered there would never be read again.
+  thesaurus: new LRUCache()
 };
 
 async function loadSettings() {
@@ -26,9 +31,10 @@ const settingsReady = loadSettings().catch(e => {
 
 async function loadCaches() {
   try {
-    const [defCache, transCache] = await Promise.all([
+    const [defCache, transCache, thesaurusCache] = await Promise.all([
       StorageUtils.get(STORAGE_KEYS.CACHE_DEFINITIONS),
-      StorageUtils.get(STORAGE_KEYS.CACHE_TRANSLATIONS)
+      StorageUtils.get(STORAGE_KEYS.CACHE_TRANSLATIONS),
+      StorageUtils.get(STORAGE_KEYS.CACHE_THESAURUS)
     ]);
 
     if (defCache[STORAGE_KEYS.CACHE_DEFINITIONS]) {
@@ -39,6 +45,11 @@ async function loadCaches() {
     if (transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]) {
       const trans = JSON.parse(transCache[STORAGE_KEYS.CACHE_TRANSLATIONS]);
       caches.translations.fromObject(trans);
+    }
+
+    if (thesaurusCache[STORAGE_KEYS.CACHE_THESAURUS]) {
+      const relations = JSON.parse(thesaurusCache[STORAGE_KEYS.CACHE_THESAURUS]);
+      caches.thesaurus.fromObject(relations);
     }
   } catch (e) {
     console.warn('Cache loading error:', e);
@@ -51,7 +62,8 @@ async function persistCaches() {
   try {
     await StorageUtils.set({
       [STORAGE_KEYS.CACHE_DEFINITIONS]: JSON.stringify(caches.definitions.toObject()),
-      [STORAGE_KEYS.CACHE_TRANSLATIONS]: JSON.stringify(caches.translations.toObject())
+      [STORAGE_KEYS.CACHE_TRANSLATIONS]: JSON.stringify(caches.translations.toObject()),
+      [STORAGE_KEYS.CACHE_THESAURUS]: JSON.stringify(caches.thesaurus.toObject())
     });
   } catch (e) {
     console.warn('Cache save error:', e);
@@ -65,9 +77,11 @@ const saveCaches = debounce(persistCaches, CONFIG.cacheSaveDelay);
 async function clearAllCaches() {
   caches.definitions.clear();
   caches.translations.clear();
+  caches.thesaurus.clear();
   await StorageUtils.set({
     [STORAGE_KEYS.CACHE_DEFINITIONS]: '{}',
-    [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}'
+    [STORAGE_KEYS.CACHE_TRANSLATIONS]: '{}',
+    [STORAGE_KEYS.CACHE_THESAURUS]: '{}'
   });
 }
 
@@ -283,10 +297,12 @@ function definitionCacheKey(key) {
 // the same languages issues no request at all - the thesaurus's included, which
 // would otherwise be asked again for relations it has already supplied.
 //
-// A bundled answer is never remembered: it made no request, so caching it grows
-// extension storage for no saving, and it would put a second copy of the
-// artefact's words where a reader can clear it and get the provider's answer
-// back.
+// A bundled answer is never remembered here: it is rebuilt from the artefact on
+// every Lookup for nothing, so caching it grows extension storage for no saving,
+// and it would put a second copy of the artefact's words where a reader can
+// clear it and get the provider's answer back. What a bundled Lookup does cost -
+// the one relation it had to ask the thesaurus for - is remembered there
+// instead, by thesaurusRelation.
 function rememberDefinition(key, payload) {
   caches.definitions.set(definitionCacheKey(key), payload);
   saveCaches();
@@ -299,7 +315,17 @@ async function fromBundle(key) {
   // An entry with no Senses is treated as a miss for the same reason: the
   // generator drops a headword it cannot answer, so one here is a defect, and a
   // Lookup that reached the provider is more useful than one that did not.
-  return senses && senses.length ? bundlePayload(senses) : null;
+  if (!senses || !senses.length) return null;
+
+  // Four in ten of the artefact's headwords carry only one of the two relations,
+  // because Wiktionary lists Antonyms far less often than Synonyms. Left alone
+  // those Lookups show a Synonym line and no Antonym line, and read as the word
+  // having no opposite rather than as the one source having none - which is what
+  // the thesaurus is for. This is the one place the bundle reaches the network,
+  // and it reaches it only for the relation the artefact is missing.
+  const payload = bundlePayload(senses);
+  await fillMissingRelations(key, payload);
+  return payload;
 }
 
 // The Fields for a headword from the live provider, in one language, or null
@@ -355,19 +381,36 @@ async function fromProvider(key, language) {
 
   const payload = providerPayload(entries);
 
-  // The thesaurus fills Synonym and Antonym, and nothing else, and only once
-  // the bundle and this provider have both come up with neither. It supplies no
+  // The thesaurus fills Synonym and Antonym, and nothing else. It supplies no
   // Definition and no Example sentence, so there is nothing of those for it to
   // be asked for.
-  if (!payload.synonyms.length && !payload.antonyms.length) {
-    Object.assign(payload, await thesaurusRelations(key));
-  }
+  await fillMissingRelations(key, payload);
 
   rememberDefinition(key, payload);
   return payload;
 }
 
-// The words one relation has for a headword, or none when that request failed.
+// The two Fields the thesaurus can fill, and the request that asks for each.
+//
+// Asked for one at a time rather than as a pair: asked for together they become
+// a single constraint - results that are a synonym and an antonym of the same
+// word, which for most words is none of them - and the answer is an empty list
+// rather than an error.
+//
+// Its vocabulary is English, so this is an English relation asked of an English
+// index. For a headword that is not English it answers with nothing, which is
+// this Field being empty rather than the Lookup failing.
+const THESAURUS_FIELDS = {
+  synonyms: { request: 'rel_syn', limit: CONFIG.maxSynonyms },
+  antonyms: { request: 'rel_ant', limit: CONFIG.maxAntonyms }
+};
+
+// The words one relation has for a headword, or null when that request failed.
+//
+// Null rather than an empty list, because those are two different facts and only
+// one of them may be remembered. An empty list says this thesaurus has nothing
+// for this word; null says nobody answered. Collapsing them would let one
+// outage become a blank Field for the rest of the session.
 //
 // Each relation is read on its own, and neither failure takes the other with it:
 // the Field that did resolve stays visible, which is the rule the Tooltip
@@ -386,34 +429,70 @@ async function relationWords(key, relation, limit) {
       .slice(0, limit);
   } catch (e) {
     console.warn(`Thesaurus ${relation} error:`, e);
-    return [];
+    return null;
   }
 }
 
-// The thesaurus, which fills Synonym and Antonym and nothing else.
+// One relation's words for a headword, asked for once and remembered.
 //
-// The two relations are two requests rather than one: asked for together they
-// become a single constraint - results that are a synonym and an antonym of the
-// same word, which for most words is none of them - and the answer is an empty
-// list rather than an error.
+// Remembered because a thesaurus answer is a fact about the headword rather
+// than about the Lookup that happened to need it: the bundle answers before the
+// definitions cache is read, so a word whose Antonyms came from here would
+// otherwise be asked for again on every single Lookup of it, for the rest of the
+// session.
 //
-// Its vocabulary is English, so this is an English relation asked of an English
-// index. For a headword that is not English it answers with nothing, which is
-// this Field being empty rather than the Lookup failing.
-async function thesaurusRelations(key) {
-  const [synonyms, antonyms] = await Promise.all([
-    relationWords(key, 'rel_syn', CONFIG.maxSynonyms),
-    relationWords(key, 'rel_ant', CONFIG.maxAntonyms)
-  ]);
-  return { synonyms, antonyms };
+// An empty answer is remembered, because a thesaurus that has nothing for a word
+// will keep having nothing for it. A failed request is not remembered at all,
+// because the next Lookup is entitled to ask again - that is the difference
+// between this Field being empty and this Field having never been asked.
+async function thesaurusRelation(key, field) {
+  const { request, limit } = THESAURUS_FIELDS[field];
+  const cacheKey = `${key}::${request}`;
+  const cached = caches.thesaurus.get(cacheKey);
+  if (cached) return cached;
+
+  const words = await relationWords(key, request, limit);
+  if (words) {
+    caches.thesaurus.set(cacheKey, words);
+    saveCaches();
+    return words;
+  }
+  return [];
+}
+
+// Fills each of Synonym and Antonym the payload has none of, and leaves the
+// ones it has alone.
+//
+// One Field at a time, because a source with one relation and not the other is
+// the ordinary case rather than the exceptional one - Wiktionary lists Antonyms
+// far less often than Synonyms, and the artefact inherits that - and treating
+// "has some" as "has both" is what leaves the other Field showing nothing. A
+// Field a source did fill is never topped up from here: a Sense's own relations
+// are scoped to that Sense, and a thesaurus word belongs to the headword as a
+// whole, so padding a one-word list out to six would trade a short true list for
+// a long one that is true of the word and not of this meaning.
+async function fillMissingRelations(key, payload) {
+  const missing = Object.keys(THESAURUS_FIELDS).filter(field => !payload[field].length);
+  if (!missing.length) return payload;
+
+  const answers = await Promise.all(
+    missing.map(async field => [field, await thesaurusRelation(key, field)])
+  );
+  for (const [field, words] of answers) {
+    // A thesaurus that fails, or has nothing, leaves the Field as it was - empty,
+    // which is a normal outcome. What it found is not appended to what the
+    // source already had, because the source's words are the better ones.
+    if (words.length) payload[field] = words;
+  }
+  return payload;
 }
 
 // The Fields of one Lookup of a headword's Definition, Example, Synonym and
 // Antonym. A headword is asked of the reader's Source language when they have
 // named one, and of English either way; the bundled dictionary answers the
 // English end of that, and the live provider is asked wherever the bundle has
-// nothing. Synonym and Antonym fall to the thesaurus once neither the bundle
-// nor the provider has any.
+// nothing. Synonym and Antonym each fall to the thesaurus on their own, once the
+// bundle and the provider have come up with neither of that one.
 //
 // The bundle sits at the English end rather than at the front of the chain
 // because it holds English Senses: a reader who named a Source language asked a
@@ -438,12 +517,12 @@ async function fetchDefinition(word) {
   // selected a piece of jargon or a product name is better served by the words
   // around it than by nothing at all, and the Tooltip prints its not-found for
   // the empty Definition Field beside them.
-  const relations = await thesaurusRelations(key);
-  if (!relations.synonyms.length && !relations.antonyms.length) {
+  const payload = { defs: [], synonyms: [], antonyms: [], audio: '' };
+  await fillMissingRelations(key, payload);
+  if (!payload.synonyms.length && !payload.antonyms.length) {
     throw new Error(ERROR_MESSAGES.NO_DEFINITION);
   }
 
-  const payload = { defs: [], ...relations, audio: '' };
   rememberDefinition(key, payload);
   return payload;
 }

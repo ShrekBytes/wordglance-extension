@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   DISABLED_SITES: 'wordglance-disabled-sites',
   CACHE_DEFINITIONS: 'wordglance-cache-definitions',
   CACHE_TRANSLATIONS: 'wordglance-cache-translations',
+  CACHE_THESAURUS: 'wordglance-cache-thesaurus',
   FORM_FIELDS_ENABLED: 'wordglance-form-fields-enabled',
   TRIGGER_POSITION: 'wordglance-trigger-position',
   ENABLE_DEFINITIONS: 'wordglance-enable-definitions',
@@ -52,8 +53,9 @@ const API_ENDPOINTS = {
   // rather than with a 404, which is what lets "this word has no entry" be
   // told apart from "the request failed". See ADR-0002.
   DICTIONARY: 'https://freedictionaryapi.com/api/v1/entries',
-  // The thesaurus, which fills Synonym and Antonym and nothing else, and only
-  // when the bundle and the live provider have come up with neither.
+  // The thesaurus, which fills Synonym and Antonym and nothing else, and each
+  // of them only once the bundle and the live provider have come up with none
+  // of that one.
   //
   // A relation is asked for by its three-letter code behind a `rel_` prefix.
   // The bare spellings - `syn`, `ant` - answer with an empty list for every

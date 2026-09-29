@@ -105,10 +105,10 @@ Click the extension icon to access settings:
 
 **What's sent, and where:** the word you selected, and nothing else. No account, no analytics, no cookies, and nothing about you stored anywhere but your own machine. WordGlance runs no servers of its own, doesn't log your lookups, and keeps your settings, cache, and per-site on/off list in Firefox's local storage, where they stay.
 
-**A common word reaches nobody.** WordGlance ships its own English dictionary inside the extension — 19,555 of the commonest English words, covering 98.6% of the words you will meet in running text — so a common word is answered from the package without a request leaving your machine. Which services a word *does* reach depends on what it is missing. Your Definitions are resolved first and your Translation is asked for afterwards, and within each, a service is contacted only after the one before it came up empty:
+**A common word stays on your machine, and usually stops there.** WordGlance ships its own English dictionary inside the extension — 19,555 of the commonest English words, covering 98.6% of the words you will meet in running text — so a common word's Definitions, Examples and relations are read from the package rather than requested. Which services a word *does* reach depends on what it is missing. Your Definitions are resolved first and your Translation is asked for afterwards, and within each, a service is contacted only after the one before it came up empty:
 
 - **[Free Dictionary API](https://freedictionaryapi.com/)** (`freedictionaryapi.com`) — only for a word the bundled dictionary has no entry for. It receives the word and the language you are reading it in.
-- **[Datamuse](https://www.datamuse.com/)** (`api.datamuse.com`) — only when neither of those has synonyms or antonyms to show. It receives the word.
+- **[Datamuse](https://www.datamuse.com/)** (`api.datamuse.com`) — for whichever of synonyms or antonyms neither of those has to show. The bundled dictionary carries only one of the two for about four words in ten, because Wiktionary lists antonyms far less often than synonyms, so this is reached far more often than not. It receives the word. Each answer is remembered, so it is asked for once.
 - **[Wiktionary](https://en.wiktionary.org/)** (`en.wiktionary.org`) — every Translation. The word goes to its own page, which also carries the pronunciation recording.
 - **[Google](https://translate.google.com/)** (`clients5.google.com`) — only when Wiktionary lists no equivalent of your word in your target language. It receives the word and your language choice.
 - **[MyMemory](https://mymemory.translated.net/)** (`api.mymemory.translated.net`) — only if Google doesn't answer.
@@ -166,7 +166,7 @@ A: No, and it is not a missing feature. A Lookup is about one selected word, and
 A: Click the extension icon → toggle "Enable on This Site" off to disable WordGlance just for the site you're on (refresh the page after toggling). To turn it off everywhere, disable it from Firefox's Add-ons manager instead.
 
 **Q: Does it work offline?**  
-A: Partly. Definitions, examples, synonyms and antonyms for the 19,555 commonest English words are served from a dictionary bundled inside the extension, so those keep working with no connection. A rarer word, and every Translation, needs the internet.
+A: Partly. Definitions, examples, synonyms and antonyms for the 19,555 commonest English words are served from a dictionary bundled inside the extension. Where that dictionary carries only one of synonyms or antonyms, the missing one is asked of Datamuse and remembered — so a common word needs a connection the first time you look it up and not again. A rarer word, and every Translation, needs the internet.
 
 **Q: What browsers are supported?**  
 A: This extension is Firefox only, and only on version 142 or later. There is no Chromium version, and the [userscript](https://github.com/ShrekBytes/WordGlance) that used to serve Chrome, Edge and Safari is archived and no longer maintained — it fetches from the page, so every service WordGlance now uses would have to allow it explicitly.
@@ -196,12 +196,13 @@ The extension uses browser storage for user preferences:
 - `wordglance-disabled-sites` - Hostnames where WordGlance is turned off
 - `wordglance-cache-definitions` - Cached dictionary results
 - `wordglance-cache-translations` - Cached translation results
+- `wordglance-cache-thesaurus` - Cached synonyms and antonyms, so a word's missing relation is asked for once
 
 ### Where the data comes from
 
 - **Bundled dictionary** (`data/wordglance-en-dictionary.json.gz`) - the 19,555 commonest English words, built from a [kaikki.org Wiktionary extraction](https://kaikki.org/dictionary/English/) with [wiktextract](https://github.com/tatuylonen/wiktextract). Wiktionary content, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Read out of the package; it never leaves your machine. Regenerate it with `npm run build:dictionary` - see [docs/dictionary-refresh.md](docs/dictionary-refresh.md).
 - **Dictionary**: [Free Dictionary API](https://freedictionaryapi.com/) - words the bundle does not carry. Wiktionary content, CC BY-SA 4.0.
-- **Relations**: [Datamuse](https://api.datamuse.com/) - synonyms and antonyms, only when neither of the above has any
+- **Relations**: [Datamuse](https://api.datamuse.com/) - whichever of synonyms or antonyms the two above are missing, asked for one at a time
 - **Translation and pronunciation**: [Wiktionary](https://en.wiktionary.org/) - the word's equivalents in your target language, and the recording to play
 - **Translation fallbacks**, reached only when Wiktionary has no equivalent: Google (`clients5.google.com`), MyMemory (`api.mymemory.translated.net`), then Bing (`www.bing.com`) - see [ADR-0005](docs/adr/0005-machine-translation-fallback-chain.md)
 

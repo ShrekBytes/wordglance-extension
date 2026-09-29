@@ -368,6 +368,18 @@ false in the page. The Definition Field showed the bundle's own Senses while the
 Translation Field reported its connection error, which is the split the design
 asks for, and a second run read the same 4,990,142 bytes.
 
+**Narrowed since this table was recorded.** ADR-0002 was amended on 2026-09-30:
+the thesaurus now fills each relation the bundle lacks, one Field at a time,
+rather than only when it has neither. `happy` is unaffected — it is one of the
+5.8% of the artefact's headwords that carries both relations, so this table still
+describes it exactly. A common word that does *not* carry both now issues a
+thesaurus request that fails in every offline row above, and the failed request
+leaves that Field empty rather than failing the Lookup, which is the same
+"empty is a normal outcome" rule the Definition Field follows. Definitions,
+Examples and the relation the bundle does carry are still read with no
+connection; a reader offline sees a shorter Synonym or Antonym line, not an
+error.
+
 The namespace was not the cause. The last row is a control: the same namespace,
 the same two headwords, and a package built without `data/`. It reproduces the
 symptom an earlier check reported — `happy` answering `Connection error - please

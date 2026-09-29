@@ -47,10 +47,10 @@ unverified rather than good.
 **Privacy & Security:**
 
 - The word you select is sent straight from your browser to the services below — that is the only data that ever leaves it. WordGlance runs no servers, logs no lookups, and has no accounts.
-- A **common English word reaches nobody at all**: definitions, examples, synonyms and antonyms for the 19,555 commonest words come from a dictionary bundled inside the extension. A rare word, and any Translation, cost a request.
+- A **common English word costs at most a request**: definitions, examples, synonyms and antonyms for the 19,555 commonest words come from a dictionary bundled inside the extension. Where that dictionary carries only one of synonyms or antonyms — which is most words, because Wiktionary lists antonyms far less often than synonyms — WordGlance asks Datamuse for the one it is missing, and only that one. Each answer is remembered, so it is asked for once. A rare word, and any Translation, cost a request.
 - Your Definitions are resolved first, and your Translation is asked for afterwards. Within each, a service is contacted only when the ones before it had no answer:
   1. **Free Dictionary API** (freedictionaryapi.com) — only for a word the bundled dictionary does not carry
-  2. **Datamuse** (api.datamuse.com) — only when neither has synonyms or antonyms to show
+  2. **Datamuse** (api.datamuse.com) — for whichever of synonyms or antonyms neither has to show
   3. **Wiktionary** (en.wiktionary.org) — every Translation, for the word's equivalents in your target language and its pronunciation
   4. **Google** (clients5.google.com), **MyMemory** (api.mymemory.translated.net), **Bing** (www.bing.com) — free machine-translation fallbacks, in that order, reached only when Wiktionary lists no equivalent of your word in your target language. MyMemory and Bing answer with a single word where Wiktionary would have offered several to choose between, so a Translation from one of them is a fallback and a rougher one. They issue no cookie and require no sign-in.
 - **Wikimedia Commons** (commons.wikimedia.org) is outside that sequence: it is contacted only when you press the pronunciation button, and it receives the recording's file name rather than your word.

@@ -1,5 +1,15 @@
 # WordGlance
 
+## Working on this repo
+
+`npm test` runs the suite. It uses the Node platform test runner and has no
+dependencies. Tests drive the background script's real message contract through
+an injected network, so a test never calls a function the background defines
+internally — see `tests/harness.js`.
+
+The bundled dictionary under `data/` is generated, not edited. See
+`docs/dictionary-refresh.md`.
+
 ## Agent skills
 
 ### Issue tracker

@@ -1,0 +1,10 @@
+{
+  "name": "wordglance-extension",
+  "version": "3.5.1",
+  "private": true,
+  "description": "Development tooling for the WordGlance Firefox extension. The extension itself ships no npm dependencies; this exists so the test suite and the dictionary generator have a discoverable entry point.",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "build:dictionary": "node tools/build-dictionary.js"
+  }
+}

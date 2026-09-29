@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# The bundled dictionary is gzipped binary. `* text=auto` already detects it -
+# the gzip magic bytes are not valid text - so this is belt and braces, and it
+# says so rather than implying a normalisation risk that does not exist.
+data/*.gz binary

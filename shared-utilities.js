@@ -12,6 +12,11 @@ const CONFIG = {
   maxSynonyms: 6,
   maxAntonyms: 6,
   maxSelectionLength: 100,
+  // A Lookup is about one headword (see HeadwordUtils), so this is a
+  // plausibility bound rather than a selection cap: long enough for the longest
+  // compound in a corpus dictionary, short enough that a run of one repeated
+  // character cannot become a provider URL.
+  maxHeadwordLength: 64,
   maxMirrorFieldLength: 20000,
   cacheSize: 500,
   apiTimeout: 10000,
@@ -115,6 +120,73 @@ const SiteUtils = {
   }
 };
 
+// One letter from any script WordGlance claims to read, Latin and otherwise.
+// The two text cleaners below both need this, and a 700-character regex is not
+// something to copy.
+const LETTER = /[a-zA-ZÀ-ɏऀ-ॿঀ-৿਀-੿઀-૿଀-୿஀-௿ఀ-౿ಀ-೿ഀ-ൿ඀-෿฀-໿ༀ-࿿က-႟Ⰰ-퟿、-퟿豈-﫿︰-﹏＀-￯]/;
+
+// A Lookup is about exactly one headword, so this is the single place that
+// decides what counts as one. Both call sites depend on it and must not grow
+// their own rule: the content script uses it to decide whether the trigger
+// appears at all, and the background script uses it to reject a non-headword
+// before issuing any request.
+const HeadwordUtils = {
+  // Returns the normalised headword, or '' when the text is not one.
+  //
+  // Case is left alone, because the tooltip shows the word as the reader selected
+  // it; the background lowercases separately when it builds a key.
+  //
+  // Whitespace is the rejection rule. A selection containing any is a phrase, and
+  // a phrase is not something a Lookup can answer.
+  normalize(text) {
+    if (!text || typeof text !== 'string') return '';
+
+    // Whitespace, and the control characters that are not whitespace, are both
+    // stripped. A tab or a newline is not stripped, because a reader's selection
+    // can span a line break and joining the halves would invent a word.
+    const cleaned = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '').trim();
+    if (!cleaned) return '';
+
+    // Rejecting whitespace is the rule, so a 5,000-character run of a single
+    // character passes it. Without a length bound that becomes a 5,000-character
+    // URL to a provider, so a headword has to be short enough to plausibly be
+    // one. The longest word in the bundled dictionary is 28 characters; the
+    // longest compound in a corpus dictionary is longer, but nothing close to
+    // this.
+    if (cleaned.length > CONFIG.maxHeadwordLength) return '';
+
+    // A single token, in any script. Apostrophes are part of a word - both the
+    // straight and the typographic kind, because a reader selecting from a
+    // typeset page gets U+2019 - as are hyphens (end-to-end) and the periods in
+    // an abbreviation (U.S.).
+    //
+    // Whitespace is absent from this class deliberately. Allowing it here and
+    // rejecting it in the length check would be the same rule written twice.
+    //
+    // Punctuation is safe to accept for the same reason it is safe in
+    // TextUtils: everything downstream sets text via textContent, never
+    // innerHTML.
+    const singleToken = /^[\w\u00C0-\u024F\u0300-\u036F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u200c\u200d'\u2018\u2019.\-]+$/;
+    if (!singleToken.test(cleaned)) return '';
+
+    // Must contain at least one letter, so a selection of digits or punctuation
+    // is not mistaken for a word.
+    if (!LETTER.test(cleaned)) return '';
+
+    return cleaned;
+  }
+};
+
+// Sanitises selected text for the Translation path.
+//
+// A Lookup is about one headword and HeadwordUtils governs the trigger, so a
+// phrase cannot reach here from the content script today. The translation
+// providers are still sanitised rather than trusted, because this is the
+// boundary where their query is built - and the provider set is being replaced
+// in later work, which is the point at which a phrase could arrive again. The
+// 5-word and 100-character limits stay until that work says otherwise; they are
+// not load-bearing today and removing them here would be a change to the
+// Translation path made in a ticket about the dictionary.
 const TextUtils = {
   sanitize(text) {
     if (!text || typeof text !== 'string') return '';
@@ -139,9 +211,9 @@ const TextUtils = {
     const validChars = /^[\w\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF\u200c\u200d\s\-\'\.\,\;\:\!\?]+$/;
     if (!validChars.test(cleaned)) return '';
 
-    // Must contain at least one letter
-    const hasLetter = /[a-zA-Z\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/;
-    if (!hasLetter.test(cleaned)) return '';
+    // Must contain at least one letter, so a selection of digits or
+    // punctuation is not mistaken for a word.
+    if (!LETTER.test(cleaned)) return '';
 
     return cleaned;
   }

@@ -72,7 +72,9 @@ async function clearAllCaches() {
 }
 
 async function fetchDefinition(word) {
-  const key = TextUtils.sanitize(word)?.toLowerCase();
+  // A Lookup is about one headword. A multi-word selection is rejected here,
+  // before any request, so a phrase never reaches a provider.
+  const key = HeadwordUtils.normalize(word).toLowerCase();
   if (!key) throw new Error(ERROR_MESSAGES.INVALID_WORD);
 
   // Ensure the persisted cache has actually been loaded into memory before checking it -

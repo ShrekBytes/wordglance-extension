@@ -467,8 +467,8 @@
       // Mirror clones the whole value, so cap it to avoid reflowing huge fields
       if (el.value.length > CONFIG.maxMirrorFieldLength) return null;
 
-      const text = el.value.substring(start, end).trim();
-      if (!text || text.length > CONFIG.maxSelectionLength) return null;
+      const text = HeadwordUtils.normalize(el.value.substring(start, end));
+      if (!text) return null;
 
       try {
         const rect = getFormFieldSelectionRect(el, start, end);
@@ -495,8 +495,10 @@
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) return null;
 
-      const text = sel.toString().trim();
-      if (!text || text.length > CONFIG.maxSelectionLength) return null;
+      // One headword or nothing: a multi-word selection must not show the
+      // trigger, because a Lookup of a phrase cannot happen.
+      const text = HeadwordUtils.normalize(sel.toString());
+      if (!text) return null;
 
       try {
         const rect = sel.getRangeAt(0).getBoundingClientRect();

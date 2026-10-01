@@ -443,12 +443,13 @@ rather than nothing.
 
 ### Two things the bundle does not do
 
-**It carries no audio.** A Lookup that must not touch the network cannot go and
-get a pronunciation, so a bundled Lookup returns an empty `audio` and the
-Tooltip's pronounce button stays hidden — the Field's documented empty outcome
-rather than a broken control. Pronunciation arrives with the Wiktionary reader in
-issue #17. This is a visible change for a reader who had a pronounce button for a
-common word, and it is the one regression this ticket accepts.
+**It carries no audio.** The bundled dictionary holds no recording, so a
+Definition resolved from it arrives with an empty `audio`. The pronunciation is
+read off the Wiktionary page the Translation Field already asks for, and the
+Tooltip takes it from that response, so a reader gets a pronounce control without
+a second request — and loses it only when the Translation Field is off,
+suppressed, or unreachable, which is the Field's documented empty outcome
+rather than a broken control.
 
 **It is not written to the persisted cache.** The cache exists to stop a request
 being made, and a bundled Lookup makes none; writing every common word a reader

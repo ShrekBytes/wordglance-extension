@@ -21,8 +21,9 @@ hop is the reason this is not simply "everything in the manifest" — the manife
 names the settings page and only the page names `popup.css`, so a check derived
 from the manifest alone would leave the one file it does not mention to a
 hand-typed entry, which is the disagreement this ADR exists to close. Adding a
-file the extension loads, without adding it to the workflow, now fails the build
-rather than publishing a broken extension.
+file the extension loads, without adding it to the workflow, now fails
+`npm test`. The release workflow does not run it, so the check is the
+maintainer's to run before releasing rather than one the build enforces.
 
 `tests/disclosure.test.js` derives the same set, for the same reason and with
 the same follow-the-page hop: it needs to know which hosts the shipped code can

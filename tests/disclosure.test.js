@@ -11,7 +11,7 @@
   a working code change, so it is easy to make and easy not to write down.
 
   So this reads manifest.json rather than a list typed out again here. A
-  permission added without a line in every document fails the build.
+  permission added without a line in every document fails `npm test`.
 */
 
 const assert = require('node:assert/strict');

@@ -37,7 +37,7 @@ language, without leaving the page you are reading.
 - **Pronunciation**: Tap the 🔊 icon to hear a word read aloud, when audio is available
 - **Translation**: See the word's equivalents in your target language, with several to choose between
 - **Per-site control**: Turn WordGlance off on individual websites without disabling the whole extension
-- **Fast**: A dictionary inside the extension, so a common word is answered without a request leaving your machine
+- **Fast**: A dictionary inside the extension, so a common word's Definitions and Examples are answered without a request leaving your machine
 - **Beautiful**: Clean interface with dark mode
 - **Mobile-friendly**: Optimized for both desktop and mobile devices
 - **Customizable**: Choose your languages and preferences
@@ -139,7 +139,7 @@ A: Nope! Works instantly after installation.
 A: Yes! Works flawlessly on both desktop and mobile devices.
 
 **Q: Is my data safe?**  
-A: Yes! WordGlance doesn't collect, store, or sell any data. The only thing that leaves your browser is the word you selected, sent straight to the services listed above — and for a common word, nothing leaves at all. See [Privacy & permissions](#privacy--permissions) for exactly which service is contacted when. The extension is open source, so you can inspect the code yourself.
+A: Yes! WordGlance doesn't collect, store, or sell any data. The only thing that leaves your browser is the word you selected, sent straight to the services listed above — and for a common word, its Definitions and Examples never leave at all. See [Privacy & permissions](#privacy--permissions) for exactly which service is contacted when. The extension is open source, so you can inspect the code yourself.
 
 **Q: Why isn't it working?**  
 A: Make sure the extension is installed and enabled. Try refreshing the page or restarting Firefox.

@@ -47,7 +47,7 @@ unverified rather than good.
 **Privacy & Security:**
 
 - The word you select is sent straight from your browser to the services below — that is the only data that ever leaves it. WordGlance runs no servers, logs no lookups, and has no accounts.
-- A **common English word costs at most a request**: definitions, examples, synonyms and antonyms for the 19,555 commonest words come from a dictionary bundled inside the extension. Where that dictionary carries only one of synonyms or antonyms — which is most words, because Wiktionary lists antonyms far less often than synonyms — WordGlance asks Datamuse for the one it is missing, and only that one. Each answer is remembered, so it is asked for once. A rare word, and any Translation, cost a request.
+- A **common English word costs at most a request**: definitions, examples, synonyms and antonyms for the 19,555 commonest words come from a dictionary bundled inside the extension. Where that dictionary carries only one of synonyms or antonyms — four words in ten of them, because Wiktionary lists antonyms far less often than synonyms — WordGlance asks Datamuse for the one it is missing, and only that one. Each answer is remembered, so it is asked for once. A rare word, and any Translation, cost a request.
 - Your Definitions are resolved first, and your Translation is asked for afterwards. Within each, a service is contacted only when the ones before it had no answer:
   1. **Free Dictionary API** (freedictionaryapi.com) — only for a word the bundled dictionary does not carry
   2. **Datamuse** (api.datamuse.com) — for whichever of synonyms or antonyms neither has to show

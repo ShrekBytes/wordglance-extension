@@ -199,8 +199,9 @@ const senseKey = (sense) => JSON.stringify([sense.pos, sense.definitions[0]]);
 // the headword's own entry. Taking extraction order as given therefore put
 // "simple past and past participle of walk" as the only Definition for "walked",
 // and led "dogs" with "plural of dog" - a reader selecting an extremely common
-// word told something about a different word. 2,573 of the 20,000 headwords
-// resolve to nothing but these, and 4,263 lead with one.
+// word told something about a different word. Several thousand of the 20,000
+// headwords resolve to nothing but these, and more lead with one; the measured
+// counts are in docs/dictionary-refresh.md.
 //
 // A form-of note is always "… of <headword>" or "… of <phrase>". Requiring the
 // "of" is what separates a form note from a real Definition that merely opens
@@ -591,7 +592,7 @@ function prune(senses) {
  * dictionary with holes in it. The frequency list is full of inflected forms -
  * "did", "told", "kids", "sighs" are all in its top 20,000 - and Wiktionary
  * files each of them as a bare form-of line with no Definition of its own. So
- * 2,573 of the cut-off resolve to nothing but "simple past of do", and a reader
+ * Several thousand of the cut-off resolve to nothing but "simple past of do", and a reader
  * selecting "did" or "told" would have been told what those words are forms of
  * rather than what they mean. Dropping those headwords instead would have
  * removed words a reader selects constantly, which is a worse failure than a

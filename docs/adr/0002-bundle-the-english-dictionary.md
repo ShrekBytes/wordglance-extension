@@ -1,6 +1,6 @@
 # Bundle the English dictionary; the network serves Translation, and a missing relation
 
-WordGlance ships a roughly 4–6 MB English dictionary inside the XPI and serves Definition, Example, Synonym and Antonym from it. A miss falls back to `freedictionaryapi.com`. Datamuse fills **each** of Synonym and Antonym that neither of those has — one Field at a time, not both or neither. Only Translation touches the network on the common path, and then only for a relation the bundle is missing.
+WordGlance ships a roughly 4–6 MB English dictionary inside the XPI and serves Definition, Example, Synonym and Antonym from it. A miss falls back to `freedictionaryapi.com`. Datamuse fills **each** of Synonym and Antonym that neither of those has — one Field at a time, not both or neither. Translation always touches the network on the common path, and so does Datamuse — for 94.2% of bundled headwords, once each, for the relation the bundle is missing.
 
 ## Amended: the network promise, 2026-09-30
 
@@ -12,9 +12,9 @@ The fix is to fill each Field on its own. What it costs is the offline promise a
 
 Two things deliberately unchanged. A Field a source *did* fill is never topped up from the thesaurus: a Sense's relations belong to that Sense and a thesaurus word belongs to the headword as a whole, so padding a one-word list to six would trade a short list that is true of this meaning for a longer one that is not. And a thesaurus that fails, or has nothing, leaves the Field empty — CONTEXT.md's "empty is a normal outcome" — rather than failing a Lookup whose Definitions have already resolved.
 
-The underlying decision is untouched. A committed artefact still makes four of the five Fields immune to the failure class that `api.dictionaryapi.dev` and `freedictionaryapi.com` both represent, at a package size that sits 30× under the AMO 200 MB limit; the artefact is still read without a request, and a common word's Definitions and Examples still cost nothing.
+The underlying decision is untouched. A committed artefact still makes four of the five Fields immune to the failure class that `api.dictionaryapi.dev` and `freedictionaryapi.com` both represent, at a package size that sits forty times under the AMO 200 MB limit; the artefact is still read without a request, and a common word's Definitions and Examples still cost nothing.
 
-This supersedes ADR-0001, which chose the opposite. The reason is the failure we just lived through rather than a change of taste. `api.dictionaryapi.dev` is a single anonymous maintainer who burned out; `freedictionaryapi.com` has the same profile — no organisation, no status page, no published rate limit, an OpenAPI spec that 404s. A committed artefact makes four of the five Fields immune to that entire class of failure, at a package size that sits 30× under the AMO 200 MB limit.
+This supersedes ADR-0001, which chose the opposite. The reason is the failure we just lived through rather than a change of taste. `api.dictionaryapi.dev` is a single anonymous maintainer who burned out; `freedictionaryapi.com` has the same profile — no organisation, no status page, no published rate limit, an OpenAPI spec that 404s. A committed artefact makes four of the five Fields immune to that entire class of failure, at a package size that sits forty times under the AMO 200 MB limit.
 
 The bundle is generated once from kaikki.org's Wiktionary extraction and committed, with a documented refresh procedure and a date stamp in the file. A dictionary that silently rots is its own failure mode: words that used to resolve would quietly stop resolving, and nobody would notice. Datamuse stays in the chain for one reason only — its `rel_syn` and `rel_ant` are WordNet-backed and clean, where Wiktionary's entry-level lists are unsorted dumps. It is never used for Definitions because it has no example sentences and thin part-of-speech data.
 

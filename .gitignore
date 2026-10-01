@@ -35,3 +35,6 @@ web-ext-artifacts/
 
 # Refactoring files
 REFACTORING_SUMMARY.md
+
+# Agent working files
+.prodready/

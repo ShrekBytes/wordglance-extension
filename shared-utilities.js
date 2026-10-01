@@ -127,8 +127,9 @@ const SiteUtils = {
 };
 
 // One letter from any script WordGlance claims to read, Latin and otherwise.
-// The two text cleaners below both need this, and a 700-character regex is not
-// something to copy.
+// Named rather than inlined because the character ranges are long, and the one
+// place that needs it - HeadwordUtils.normalize - is a rule about what a
+// headword is rather than about letters.
 const LETTER = /[a-zA-ZÀ-ɏऀ-ॿঀ-৿਀-੿઀-૿଀-୿஀-௿ఀ-౿ಀ-೿ഀ-ൿ඀-෿฀-໿ༀ-࿿က-႟Ⰰ-퟿、-퟿豈-﫿︰-﹏＀-￯]/;
 
 // A Lookup is about exactly one headword, so this is the single place that
@@ -156,9 +157,10 @@ const HeadwordUtils = {
     // Rejecting whitespace is the rule, so a 5,000-character run of a single
     // character passes it. Without a length bound that becomes a 5,000-character
     // URL to a provider, so a headword has to be short enough to plausibly be
-    // one. The longest word in the bundled dictionary is 28 characters; the
-    // longest compound in a corpus dictionary is longer, but nothing close to
-    // this.
+    // one. Nothing in the bundled dictionary comes near this: its longest
+    // headword is `extraterrestrials`, 17 characters, and the generator admits
+    // [a-z] only, so no hyphenated compound can be one either. The longest
+    // compound in a corpus dictionary is longer, but nothing close to this.
     if (cleaned.length > CONFIG.maxHeadwordLength) return '';
 
     // A single token, in any script. Apostrophes are part of a word - both the

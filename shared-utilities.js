@@ -4,6 +4,13 @@
 */
 
 const CONFIG = {
+  // The only z-index here that competes with the host page: the host is
+  // `position: fixed`, so it forms a stacking context and everything inside the
+  // shadow root paints within it. The two values in content.js's stylesheet order
+  // the tooltip against the trigger icon and nothing else. Nothing measurable sets
+  // this number - it is set high so ordinary page chrome cannot cover the UI, and a
+  // page that stacks above it wins outright, which is the limit of what a z-index
+  // can buy.
   tooltipZIndex: 999999,
   maxDefinitions: 9,
   maxTranslations: 8,

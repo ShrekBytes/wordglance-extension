@@ -598,9 +598,11 @@ function translationSource(unasked) {
 
 // The alternatives the first provider ranked for a headword, best first.
 //
-// Its answer is an array whose dictionary block sits at a fixed position, and
-// getting to the alternatives takes two steps: the block is wrapped in a
-// one-element array, and inside it the headword, a null and then the ranked
+// Its answer is an array whose dictionary block sits at a position read off a
+// captured response rather than off a published schema: the endpoint is
+// undocumented, and `RANKED_ALTERNATIVES_VERBATIM` in tests/background.test.js is
+// that capture. Getting to the alternatives takes two steps: the block is wrapped
+// in a one-element array, and inside it the headword, a null and then the ranked
 // alternatives follow - each of which is a list whose own first element is the
 // word. So the alternatives are at `body[5][0][2]`.
 //

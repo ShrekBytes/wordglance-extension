@@ -179,8 +179,9 @@ A: This extension is Firefox only, and only on version 142 or later. There is no
 
 - `manifest.json` - Extension configuration (Manifest V2)
 - `shared-constants.js` - Storage keys, message types, supported languages, and error messages shared by every script
-- `shared-utilities.js` - Shared helpers used across scripts: storage access, per-site enable/disable list, text sanitizing, debounce, LRU cache, fetch-with-timeout
+- `shared-utilities.js` - Shared helpers used across scripts: storage access, settings read and write, per-site enable/disable list, headword normalisation, debounce, LRU cache, fetch-with-timeout
 - `background.js` - Non-persistent background script; handles API calls, caching, and settings
+- `wiktionary.js` - Parses the Wiktionary page for the headword's Translation Field and its recording
 - `content.js` - Content script injected on every page; detects text selection and renders the tooltip
 - `popup.js` - Settings popup interface
 - `popup.html` - Settings popup HTML
@@ -188,15 +189,7 @@ A: This extension is Firefox only, and only on version 142 or later. There is no
 
 ### Configuration
 
-The extension uses browser storage for user preferences:
-
-- `wordglance-source-language` - Source language (default: 'auto')
-- `wordglance-target-language` - Target language (default: 'en')
-- `wordglance-dark-mode` - Dark mode toggle
-- `wordglance-disabled-sites` - Hostnames where WordGlance is turned off
-- `wordglance-cache-definitions` - Cached dictionary results
-- `wordglance-cache-translations` - Cached translation results
-- `wordglance-cache-thesaurus` - Cached synonyms and antonyms, so a word's missing relation is asked for once
+The extension keeps its preferences and its cached answers in `browser.storage.local`. Every preference is declared once, as an in-memory key with its storage key and its default, in `SETTINGS_SCHEMA` (`shared-constants.js`) - a setting added there needs no edit to this file. Three further keys hold cached answers rather than preferences: `wordglance-cache-definitions`, `wordglance-cache-translations` and `wordglance-cache-thesaurus`.
 
 ### Where the data comes from
 

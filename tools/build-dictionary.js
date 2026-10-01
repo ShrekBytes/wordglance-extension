@@ -793,27 +793,19 @@ if (require.main === module) {
 }
 
 module.exports = {
-  BUDGET,
   SOURCES,
-  WIKTIONARY_HEADERS,
-  bareWords,
   buildEntries,
   createAccumulator,
   createLineSplitter,
   gzip,
-  isBareWord,
-  isCandidate,
   isInflection,
   mayContainCandidate,
   inflectionTarget,
   measureCoverage,
   normaliseEtag,
-  prune,
   recordLine,
-  resolveInflections,
   selectCandidates,
   senseKey,
   serialise,
-  toSenses,
-  truncate
+  toSenses
 };

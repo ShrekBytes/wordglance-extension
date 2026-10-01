@@ -126,7 +126,7 @@ Nothing in the budget was widened to get there, and the cut-off is unchanged at
 20,000. The size comes from the Example budget, which ADR-0002 specifies as a
 count (one per Sense) but not a length. Measured on the built artefact, Examples
 account for 2.6 MB of the 5.0 MB — more than every Definition and relation
-together — at 114 characters each on average. A quotation from a
+together — at 111 characters each on average. A quotation from a
 nineteenth-century text is a long string, and the 440-character cap
 (`BUDGET.exampleChars`, not a recorded decision, chosen here) is what stops the
 longest ones dominating.
@@ -135,7 +135,7 @@ longest ones dominating.
 | --- | --- |
 | capped at 440 characters (shipped) | 5.0 MB |
 | capped at 120 characters | 4.2 MB |
-| dropped entirely | 2.2 MB |
+| dropped entirely | 2.3 MB |
 
 Cutting Examples to 120 characters would land inside ADR-0002's 4.3 MB. It was
 not done, because 120 characters is roughly one clause, and an Example exists to

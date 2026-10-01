@@ -196,7 +196,6 @@
       }
       .wordglance-tooltip.dark-mode .definition-text { color: #e0e0e0; }
 
-      .wordglance-tooltip .translation-item { margin-bottom: 4px; word-wrap: break-word; overflow-wrap: break-word; }
       .wordglance-tooltip .translation-grid {
         display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
         min-height: 80px; position: relative; border-radius: 4px; overflow: hidden;

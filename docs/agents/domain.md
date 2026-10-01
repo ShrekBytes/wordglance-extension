@@ -9,10 +9,9 @@ This is a **single-context** repo: one `CONTEXT.md` and one `docs/adr/` at the r
 ```
 /
 ├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-some-decision.md
-│   └── 0002-another-decision.md
-└── src/
+└── docs/adr/
+    ├── 0001-thin-client-over-third-party-free-apis.md
+    └── 0002-bundle-the-english-dictionary.md
 ```
 
 ## Before exploring, read these
@@ -32,4 +31,4 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts ADR-0007 (the background refuses a turned-off Field), but worth reopening because…_

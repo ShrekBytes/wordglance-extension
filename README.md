@@ -5,12 +5,7 @@ Definitions, Examples, Synonyms, Antonyms, and its equivalents in your target
 language, without leaving the page you are reading.
 
 > **Looking for Chrome, Edge, or Safari?**
-> There is no extension for Chromium-based browsers. The
-> [WordGlance userscript](https://github.com/ShrekBytes/WordGlance) that used to
-> serve them is archived and no longer maintained — a userscript fetches from the
-> page, so every service WordGlance now uses would have to allow it explicitly.
-> If that is the browser you have, this extension is not for you.
->
+> There is no extension for Chromium-based browsers.
 > **Why no extension for Chromium-based browsers?**
 > Cause… fu\*k Google.
 

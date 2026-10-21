@@ -164,7 +164,7 @@ A: Click the extension icon → toggle "Enable on This Site" off to disable Word
 A: Partly. Definitions, examples, synonyms and antonyms for the 19,555 commonest English words are served from a dictionary bundled inside the extension. Where that dictionary carries only one of synonyms or antonyms, the missing one is asked of Datamuse and remembered — so a common word needs a connection the first time you look it up and not again. A rarer word, and every Translation, needs the internet.
 
 **Q: What browsers are supported?**  
-A: This extension is Firefox only, and only on version 142 or later. There is no Chromium version, and the [userscript](https://github.com/ShrekBytes/WordGlance) that used to serve Chrome, Edge and Safari is archived and no longer maintained — it fetches from the page, so every service WordGlance now uses would have to allow it explicitly.
+A: This extension is Firefox only, and only on version 142 or later.
 
 **Have a question, suggestion, or found a bug?** [Open an issue](https://github.com/ShrekBytes/wordglance-extension/issues) on GitHub and we'll help you out!
 
